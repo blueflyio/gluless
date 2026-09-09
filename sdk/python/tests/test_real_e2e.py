@@ -1,22 +1,20 @@
-import os
 import json
+import os
 import socket
-from typing import Any
 import threading
-import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any
+
 import pytest
-from gluless.importers.openapi import OpenAPIImporter
+
 from gluless.compiler import GluLessCompiler
-from gluless.runtime import GluLessRuntime, LimitViolationError
-from gluless.limits import LimitEvaluator
-from gluless.models import Utility, UtilityType, SideEffectType, UtilityTransport, Contract, Goal, Limit
-from gluless.results import Result
+from gluless.importers.openapi import OpenAPIImporter
+from gluless.runtime import GluLessRuntime
 
 # Shared mutable state for the mock server to simulate state transitions
 MOCK_SERVER_STATE = {
     "cities": [
-        {"name": "blucity", "health": "degraded"}
+        {"name": "blucity", "status": "degraded"}
     ]
 }
 
@@ -27,9 +25,9 @@ def get_free_port():
     s.close()
     return port
 
-class GasCityStatefulHandler(BaseHTTPRequestHandler):
+class MonitoringStatefulHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == "/cities":
+        if self.path == "/services":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -39,9 +37,10 @@ class GasCityStatefulHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_POST(self):
+        self.rfile.read(int(self.headers.get("Content-Length", 0)))  # consume body before replying
         if self.path.startswith("/sessions/") and self.path.endswith("/nudge"):
             # Update state to healthy
-            MOCK_SERVER_STATE["cities"][0]["health"] = "healthy"
+            MOCK_SERVER_STATE["cities"][0]["status"] = "healthy"
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -56,7 +55,7 @@ class GasCityStatefulHandler(BaseHTTPRequestHandler):
 @pytest.fixture(scope="module")
 def mock_api_server():
     port = get_free_port()
-    server = HTTPServer(("127.0.0.1", port), GasCityStatefulHandler)
+    server = HTTPServer(("127.0.0.1", port), MonitoringStatefulHandler)
     thread = threading.Thread(target=server.serve_forever)
     thread.daemon = True
     thread.start()
@@ -65,7 +64,7 @@ def mock_api_server():
     thread.join()
 
 @pytest.fixture(scope="module")
-def gascity_utilities():
+def monitoring_utilities():
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     openapi_path = os.path.join(base_dir, "api", "openapi.yaml")
     with open(openapi_path, "r", encoding="utf-8") as f:
@@ -74,17 +73,17 @@ def gascity_utilities():
     return importer.import_spec(spec_content)
 
 # Response transformer mapping list representation to target format
-def gascity_transformer(utility_id: str, body: Any) -> dict:
-    if utility_id == "GasCity.cities.list" and isinstance(body, list):
+def monitoring_transformer(utility_id: str, body: Any) -> dict:
+    if utility_id == "Monitoring.services.list" and isinstance(body, list):
         cities_map = {}
         for city in body:
-            cities_map[city["name"]] = {"health": city["health"]}
+            cities_map[city["name"]] = {"health": city["status"]}
         return {"cities": cities_map}
     return {}
 
 
 # TEST 1 — Denied Mutation
-def test_denied_mutation(mock_api_server, gascity_utilities):
+def test_denied_mutation(mock_api_server, monitoring_utilities):
     # Setup contract that explicitly denies nudging
     contract_yaml = """
     id: test-denied-contract
@@ -95,23 +94,23 @@ def test_denied_mutation(mock_api_server, gascity_utilities):
       - id: block-nudge
         action_pattern: deny nudge
     utilities:
-      - GasCity.cities.list
-      - GasCity.sessions.nudge
+      - Monitoring.services.list
+      - Monitoring.sessions.nudge
     """
     # Reset mock state
-    MOCK_SERVER_STATE["cities"][0]["health"] = "degraded"
+    MOCK_SERVER_STATE["cities"][0]["status"] = "degraded"
 
-    contract = GluLessCompiler.compile_yaml(contract_yaml, available_utilities=gascity_utilities)
-    
+    contract = GluLessCompiler.compile_yaml(contract_yaml, available_utilities=monitoring_utilities)
+
     runtime = GluLessRuntime(
         contract=contract,
         thread_id="thread-test-1",
         run_id="run-test-1"
     )
-    
+
     initial_state = {"cities": {"blucity": {"health": "degraded"}}}
     inputs = {
-        "GasCity.sessions.nudge": {"id": "mayor", "force": True}
+        "Monitoring.sessions.nudge": {"id": "mayor", "force": True}
     }
 
     # Should raise LimitViolationError and result in "blocked" Result status
@@ -119,9 +118,9 @@ def test_denied_mutation(mock_api_server, gascity_utilities):
         initial_state=initial_state,
         server_url=mock_api_server,
         utility_inputs=inputs,
-        response_transformer=gascity_transformer
+        response_transformer=monitoring_transformer
     )
-    
+
     assert res.status == "blocked"
     assert "denied" in res.failure.lower()
     # Verify no mutation invocations were executed
@@ -129,7 +128,7 @@ def test_denied_mutation(mock_api_server, gascity_utilities):
 
 
 # TEST 2 — Allowed Mutation
-def test_allowed_mutation(mock_api_server, gascity_utilities):
+def test_allowed_mutation(mock_api_server, monitoring_utilities):
     # Setup contract that explicitly allows nudging
     contract_yaml = """
     id: test-allowed-contract
@@ -140,37 +139,37 @@ def test_allowed_mutation(mock_api_server, gascity_utilities):
       - id: permit-nudge
         action_pattern: allow nudge
     utilities:
-      - GasCity.cities.list
-      - GasCity.sessions.nudge
+      - Monitoring.services.list
+      - Monitoring.sessions.nudge
     """
     # Reset mock server state
-    MOCK_SERVER_STATE["cities"][0]["health"] = "degraded"
+    MOCK_SERVER_STATE["cities"][0]["status"] = "degraded"
 
-    contract = GluLessCompiler.compile_yaml(contract_yaml, available_utilities=gascity_utilities)
+    contract = GluLessCompiler.compile_yaml(contract_yaml, available_utilities=monitoring_utilities)
     runtime = GluLessRuntime(
         contract=contract,
         thread_id="thread-test-2",
         run_id="run-test-2"
     )
-    
+
     inputs = {
-        "GasCity.sessions.nudge": {"id": "mayor", "force": True}
+        "Monitoring.sessions.nudge": {"id": "mayor", "force": True}
     }
 
     res = runtime.execute_contract(
         initial_state={"cities": {"blucity": {"health": "degraded"}}},
         server_url=mock_api_server,
         utility_inputs=inputs,
-        response_transformer=gascity_transformer
+        response_transformer=monitoring_transformer
     )
-    
+
     # Must have allowed the nudge operation
     assert any(ld["effect"] == "allow" and "nudge" in ld["utility"] for ld in res.limit_decisions)
     assert res.status == "satisfied"
 
 
 # TEST 3 — HTTP Success Does Not Prove Goal Satisfaction
-def test_http_success_does_not_satisfy_goal(mock_api_server, gascity_utilities):
+def test_http_success_does_not_satisfy_goal(mock_api_server, monitoring_utilities):
     # Setup contract
     contract_yaml = """
     id: test-http-success-contract
@@ -181,11 +180,11 @@ def test_http_success_does_not_satisfy_goal(mock_api_server, gascity_utilities):
       - id: permit-nudge
         action_pattern: allow nudge
     utilities:
-      - GasCity.cities.list
-      - GasCity.sessions.nudge
+      - Monitoring.services.list
+      - Monitoring.sessions.nudge
     """
-    contract = GluLessCompiler.compile_yaml(contract_yaml, available_utilities=gascity_utilities)
-    
+    contract = GluLessCompiler.compile_yaml(contract_yaml, available_utilities=monitoring_utilities)
+
     # Create custom mock server that returns 200 OK on nudge but keeps state degraded
     class BrokenStateHandler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -193,9 +192,10 @@ def test_http_success_does_not_satisfy_goal(mock_api_server, gascity_utilities):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             # Still returns degraded despite nudge
-            self.wfile.write(json.dumps([{"name": "blucity", "health": "degraded"}]).encode("utf-8"))
+            self.wfile.write(json.dumps([{"name": "blucity", "status": "degraded"}]).encode("utf-8"))
 
         def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))  # consume body before replying
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -209,16 +209,16 @@ def test_http_success_does_not_satisfy_goal(mock_api_server, gascity_utilities):
     thread = threading.Thread(target=broken_server.serve_forever)
     thread.daemon = True
     thread.start()
-    
+
     try:
         runtime = GluLessRuntime(
             contract=contract,
             thread_id="thread-test-3",
             run_id="run-test-3"
         )
-        
+
         inputs = {
-            "GasCity.sessions.nudge": {"id": "mayor", "force": True}
+            "Monitoring.sessions.nudge": {"id": "mayor", "force": True}
         }
 
         # Run with max_steps=1 to prevent infinite loop
@@ -226,10 +226,10 @@ def test_http_success_does_not_satisfy_goal(mock_api_server, gascity_utilities):
             initial_state={"cities": {"blucity": {"health": "degraded"}}},
             server_url=f"http://127.0.0.1:{port}",
             utility_inputs=inputs,
-            response_transformer=gascity_transformer,
+            response_transformer=monitoring_transformer,
             max_steps=1
         )
-        
+
         # Status must not be satisfied because independent read-back still reported degraded health
         assert res.status == "failed"
         assert "Max steps reached without goal satisfaction" in res.failure
@@ -239,7 +239,7 @@ def test_http_success_does_not_satisfy_goal(mock_api_server, gascity_utilities):
 
 
 # TEST 4 — Read-back satisfies Goal & TEST 5 — Evidence verification
-def test_readback_and_evidence(mock_api_server, gascity_utilities):
+def test_readback_and_evidence(mock_api_server, monitoring_utilities):
     contract_yaml = """
     id: test-e2e-evidence-contract
     goals:
@@ -249,42 +249,42 @@ def test_readback_and_evidence(mock_api_server, gascity_utilities):
       - id: permit-all
         action_pattern: allow *
     utilities:
-      - GasCity.cities.list
-      - GasCity.sessions.nudge
+      - Monitoring.services.list
+      - Monitoring.sessions.nudge
     """
     # Reset mock state
-    MOCK_SERVER_STATE["cities"][0]["health"] = "degraded"
+    MOCK_SERVER_STATE["cities"][0]["status"] = "degraded"
 
-    contract = GluLessCompiler.compile_yaml(contract_yaml, available_utilities=gascity_utilities)
+    contract = GluLessCompiler.compile_yaml(contract_yaml, available_utilities=monitoring_utilities)
     runtime = GluLessRuntime(
         contract=contract,
         thread_id="thread-test-45",
         run_id="run-test-45"
     )
-    
+
     inputs = {
-        "GasCity.sessions.nudge": {"id": "mayor", "force": True}
+        "Monitoring.sessions.nudge": {"id": "mayor", "force": True}
     }
 
     res = runtime.execute_contract(
         initial_state={"cities": {"blucity": {"health": "degraded"}}},
         server_url=mock_api_server,
         utility_inputs=inputs,
-        response_transformer=gascity_transformer
+        response_transformer=monitoring_transformer
     )
 
     # Goal satisfied
     print("ACTUAL FAILURE DETAIL:", res.failure)
     assert res.status == "satisfied"
-    
+
     # State evidence must exist and be cryptographically verified
     assert len(res.evidence) >= 2
-    
+
     state_evidence = [ev for ev in res.evidence if ev.kind == "state_observation"][-1]
     assert state_evidence.claim["cities"]["blucity"]["health"] == "healthy"
     assert state_evidence.provenance["run"] == "run-test-45"
     assert state_evidence.provenance["contract"] == "test-e2e-evidence-contract"
-    
+
     # Verify SHA-256 digest consistency
     import hashlib
     canonical_data = {

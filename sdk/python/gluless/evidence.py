@@ -2,7 +2,8 @@ import hashlib
 import json
 import time
 from dataclasses import dataclass
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 
 @dataclass
 class Evidence:
@@ -16,8 +17,10 @@ class Evidence:
 
 class EvidenceBuilder:
     """
-    EvidenceBuilder constructs cryptographically verifiable Evidence objects.
-    Computes a SHA-256 digest over the canonical key-sorted serialization.
+    Builds content-addressed Evidence: a SHA-256 digest over the canonical
+    (key-sorted) serialization of kind/claim/source/provenance. This is an
+    integrity digest, not a signature; signing belongs to an external
+    EvidenceStore.
     """
     @staticmethod
     def build(

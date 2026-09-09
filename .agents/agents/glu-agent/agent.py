@@ -561,7 +561,9 @@ async def _run_contract(
     # ─────────────────────────────────────────────────────────────────
     yield _delta(thread_id, run_id, [{"op": "replace", "path": "/phase", "value": "executing"}])
 
-    resolver = UtilityResolver(_API_URL)
+    # Auth header value comes from the environment (sourced by the operator from an
+    # external secret provider); the resolver sends it and never records it.
+    resolver = UtilityResolver(_API_URL, headers={"X-API-Token": _API_TOKEN} if _API_TOKEN else None)
     observations: list[dict] = []
     world_state: dict[str, Any] = {}
     execution_http_status: int = 0

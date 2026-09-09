@@ -1,10 +1,16 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
-from gluless.models import Contract, Utility, SideEffectType
+
+from gluless.models import Contract, SideEffectType, Utility
+
+EFFECT_ALLOW = "allow"
+EFFECT_DENY = "deny"
+EFFECT_APPROVAL = "approval_required"
+
 
 @dataclass
 class LimitDecision:
-    effect: str  # "allow" | "deny" | "approval_required" | "indeterminate"
+    effect: str  # "allow" | "deny" | "approval_required"
     utility: str
     reason: str
     limit_id: Optional[str] = None
@@ -15,123 +21,91 @@ class LimitEvaluator:
     """
     Evaluate a utility invocation against Contract Limits.
 
-    Evaluation model
-    ----------------
-    Limits are processed in **declaration order**.  Each matching rule
-    updates the current decision; the **last** matching rule wins.
+    Rule forms (case-insensitive):
+        allow <selector>
+        deny <selector>
+        require approval for <selector>
 
-    This is the correct model for the canonical "deny *, allow X" pattern:
+    Selector forms:
+        *                    everything
+        Ns.*                 namespace / prefix glob (Ns, Ns.x, Ns.x.y)
+        Ns.res.action        exact utility id
+        action               bare word: matches the utility's final id segment,
+                             its side-effect class, or its type ("read"/"mutation")
 
-        deny *                     → tentative DENY (matches everything)
-        allow GasCity.cities.list  → overrides → ALLOW
+    Arbitrary substring matching is intentionally NOT supported: an authority
+    rule must name what it governs. "allow cities" must not match
+    "Ns.cities.delete" by accident, and "allow read" must not match
+    "Ns.readiness.read".
 
-    Result for GasCity.cities.list:  ALLOW
-    Result for GasCity.city.create:  DENY  (only `deny *` matched)
-    Result for GasCity.sessions.nudge: DENY (only `deny *` matched)
+    Limits are processed in declaration order; the last matching rule wins,
+    which supports the canonical "deny *" then "allow X" pattern.
 
-    Secure default
-    --------------
-    If no limit matches at all:
-      - READ / no-side-effect utilities → ALLOW  (observing state is safe)
-      - MUTATION / UNKNOWN              → DENY   (writing requires explicit consent)
+    Secure default when no rule matches:
+        READ / NONE side effects  -> allow
+        anything else (incl. UNKNOWN) -> deny
     """
 
     def __init__(self, contract: Contract):
         self.contract = contract
 
-    def _matches(self, pattern_action: str, utility: Utility) -> bool:
-        """
-        Return True when pattern_action applies to this utility.
-
-        Matching rules (evaluated in order, first match returns):
-          *                wildcard — matches everything
-          Prefix.*         namespace glob — matches any utility whose ID
-                           starts with Prefix (case-insensitive)
-          exact.id         exact utility ID match
-          substring        substring match within the utility ID
-          side-effect      matches the utility's side_effects value
-          type             matches the utility's type value
-
-        Examples:
-          *                       matches GasCity.cities.list
-          GasCity.*               matches GasCity.cities.list, GasCity.city.create
-          GasCity.cities.list     matches GasCity.cities.list only (also via substring)
-          create                  matches GasCity.city.create (side_effects == create)
-        """
-        p = pattern_action.lower().strip()
+    @staticmethod
+    def _matches(selector: str, utility: Utility) -> bool:
+        p = selector.lower().strip()
         uid = utility.id.lower()
-
+        if not p:
+            return False
         if p == "*":
             return True
-
-        # Namespace glob: "GasCity.*" → prefix = "gascity"
         if p.endswith(".*"):
             prefix = p[:-2].rstrip(".")
             return uid == prefix or uid.startswith(prefix + ".")
-
-        # Exact match
         if p == uid:
             return True
-
-        # Substring match on utility ID
-        if p in uid:
-            return True
-
-        # Match on side-effect class (e.g. "create", "external_message")
-        if p == utility.side_effects.value:
-            return True
-
-        # Match on utility type ("read", "mutation")
-        if p == utility.type.value:
-            return True
-
+        if "." not in p:
+            if uid.rsplit(".", 1)[-1] == p:
+                return True
+            if p == utility.side_effects.value or p == utility.type.value:
+                return True
         return False
 
-    def evaluate(self, utility: Utility) -> LimitDecision:
-        is_safe    = utility.side_effects in (SideEffectType.NONE, SideEffectType.READ)
-        is_unknown = utility.side_effects == SideEffectType.UNKNOWN
+    @staticmethod
+    def parse_rule(action_pattern: str):
+        """Return (effect, selector) or raise ValueError for an unrecognised rule."""
+        rule = action_pattern.strip()
+        low = rule.lower()
+        if low.startswith("deny "):
+            return EFFECT_DENY, rule[5:].strip()
+        if low.startswith("allow "):
+            return EFFECT_ALLOW, rule[6:].strip()
+        if low.startswith("require approval for "):
+            return EFFECT_APPROVAL, rule[len("require approval for "):].strip()
+        raise ValueError(f"Unrecognised limit rule: '{action_pattern}'")
 
-        # Process limits in declaration order — last match wins.
-        current_effect:   str                = ""
-        current_reason:   str                = ""
-        current_limit_id: Optional[str]      = None
+    def evaluate(self, utility: Utility) -> LimitDecision:
+        current_effect = ""
+        current_reason = ""
+        current_limit_id: Optional[str] = None
 
         for limit in self.contract.limits:
-            pattern = limit.action_pattern.strip().lower()
-
-            if pattern.startswith("deny "):
-                action = pattern[5:].strip()
-                if self._matches(action, utility):
-                    current_effect   = "deny"
-                    current_reason   = f"Denied by limit '{limit.id}' ({limit.action_pattern})"
-                    current_limit_id = limit.id
-
-            elif pattern.startswith("allow "):
-                action = pattern[6:].strip()
-                if self._matches(action, utility):
-                    current_effect   = "allow"
-                    current_reason   = f"Allowed by limit '{limit.id}' ({limit.action_pattern})"
-                    current_limit_id = limit.id
+            effect, selector = self.parse_rule(limit.action_pattern)
+            if self._matches(selector, utility):
+                current_effect = effect
+                current_limit_id = limit.id
+                verb = {EFFECT_DENY: "Denied", EFFECT_ALLOW: "Allowed", EFFECT_APPROVAL: "Approval required"}[effect]
+                current_reason = f"{verb} by limit '{limit.id}' ({limit.action_pattern})"
 
         if current_effect:
-            return LimitDecision(
-                effect=current_effect,
-                utility=utility.id,
-                reason=current_reason,
-                limit_id=current_limit_id,
-            )
+            return LimitDecision(effect=current_effect, utility=utility.id, reason=current_reason, limit_id=current_limit_id)
 
-        # No limit matched — apply secure defaults
-        if is_safe and not is_unknown:
+        if utility.side_effects in (SideEffectType.NONE, SideEffectType.READ):
             return LimitDecision(
-                effect="allow",
+                effect=EFFECT_ALLOW,
                 utility=utility.id,
                 reason="No limit matched; safe read-only capability permitted by default",
             )
-
-        effect_name = "unknown" if is_unknown else utility.side_effects.value
         return LimitDecision(
-            effect="deny",
+            effect=EFFECT_DENY,
             utility=utility.id,
-            reason=f"No limit matched; mutation/unknown effect '{effect_name}' denied by default",
+            reason=f"No limit matched; mutation/unknown effect '{utility.side_effects.value}' denied by default",
         )

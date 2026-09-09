@@ -1,18 +1,40 @@
-# GluLess — GitLab CI
+# GluLess CI
 #
-# Publishes demo/ to GitLab Pages via the shared blueflyio/gitlab_components
-# pages component. No bespoke deploy logic in this repository.
-#
-# The demo is pure static files (index.html, style.css, app.js,
-# data/proven-canary.json) — no build step required.
-#
-# Deployment trigger: on_success from main (auto_deploy: "true").
-# Manual deploy available from any branch for testing.
+# Composes shared blueflyio/gitlab_components:
+#   minimal-ci  stages, base runner, custom-ci governance detector
+#   pages       publishes demo/ (static files) to GitLab Pages from main
+# The only repo-local job is the Python test job; no python component exists
+# in the shared catalog yet. If one is added, replace test:python with it.
 
 include:
+  - component: $CI_SERVER_FQDN/blueflyio/gitlab_components/minimal-ci@release/v0.1.x
   - component: $CI_SERVER_FQDN/blueflyio/gitlab_components/pages@release/v0.1.x
     inputs:
       output_dir: demo
       deploy_branch: main
       auto_deploy: "true"
       artifact_expiry: "4 weeks"
+
+test:python:
+  stage: test
+  tags:
+    - $BUILD_RUNNER_TAG
+  image: python:3.12-slim
+  variables:
+    GLULESS_HOME: $CI_PROJECT_DIR/.gluless-ci
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  before_script:
+    - cd sdk/python
+    - pip install -q -e ".[dev]"
+  script:
+    - ruff check .
+    - pytest -q --junitxml=junit.xml
+  artifacts:
+    when: always
+    reports:
+      junit: sdk/python/junit.xml
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
