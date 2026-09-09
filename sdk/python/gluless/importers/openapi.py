@@ -1,15 +1,51 @@
-import yaml
-import json
+"""OpenAPI -> Utility importer.
+
+Identity rules (deterministic, collision-free by construction):
+
+    namespace  = x-provider-name | slug(info.title) | default_namespace
+    resource   = every non-parameter path segment after version/api prefixes,
+                 joined with "." (for /city/{n}/session/{id}/kill -> "city.session")
+    action     = GET  -> "list" (collection) | "read" (ends in a parameter slot)
+                 POST -> last word segment when it follows a parameter slot
+                         (an RPC-style action such as .../{id}/kill), else "create"
+                 PUT/PATCH -> "update", DELETE -> "delete", other -> method
+    id         = f"{namespace}.{resource}.{action}"
+
+`x-gluless-name` overrides the derived identity. Duplicate ids are an import
+error: Limits target ids, so two operations sharing one id would share one
+authority decision.
+
+Side effects (declared): GET -> READ, PUT/PATCH -> UPDATE, DELETE -> DELETE,
+POST create -> CREATE, POST RPC action -> UNKNOWN. UNKNOWN is deliberate: an
+action like `kill` must not inherit the authority of `create`.
+`x-gluless-side-effects` overrides.
+"""
+import hashlib
 import re
-from typing import Dict, List, Optional, Any, Tuple
-from gluless.models import Utility, UtilityTransport, UtilityType, SideEffectType
+from typing import Any, Dict, List, Optional, Tuple
+
+import yaml
+
+from gluless.models import SideEffectType, Utility, UtilityTransport, UtilityType
+
+HTTP_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "trace")
+_PREFIX_PATTERNS = (r"^v[0-9]+$", r"^api$", r"^v[0-9]+\.[0-9]+$")
+
+
+class UtilityImportError(ValueError):
+    """Raised when an OpenAPI document cannot be projected into a valid Utility set."""
+
+
+def _unescape_pointer(part: str) -> str:
+    return part.replace("~1", "/").replace("~0", "~")
+
 
 def resolve_ref(ref_str: str, document: Dict[str, Any]) -> Any:
     if not ref_str.startswith("#/"):
         return {"$ref": ref_str}
-    parts = ref_str.lstrip("#/").split("/")
-    curr = document
-    for part in parts:
+    curr: Any = document
+    for raw in ref_str[2:].split("/"):
+        part = _unescape_pointer(raw)
         if isinstance(curr, dict) and part in curr:
             curr = curr[part]
         elif isinstance(curr, list):
@@ -21,234 +57,231 @@ def resolve_ref(ref_str: str, document: Dict[str, Any]) -> Any:
             return {"$ref": ref_str}
     return curr
 
+
 def resolve_all_refs(node: Any, document: Dict[str, Any], resolved_paths: Optional[set] = None) -> Any:
     if resolved_paths is None:
         resolved_paths = set()
-        
     if isinstance(node, dict):
         if "$ref" in node and isinstance(node["$ref"], str):
             ref = node["$ref"]
             if ref in resolved_paths:
-                return {"$ref": ref}
+                return {"$ref": ref}  # cycle: leave the reference in place
             resolved_paths.add(ref)
-            resolved_val = resolve_ref(ref, document)
-            return resolve_all_refs(resolved_val, document, resolved_paths)
+            return resolve_all_refs(resolve_ref(ref, document), document, resolved_paths)
         return {k: resolve_all_refs(v, document, resolved_paths.copy()) for k, v in node.items()}
-    elif isinstance(node, list):
+    if isinstance(node, list):
         return [resolve_all_refs(item, document, resolved_paths.copy()) for item in node]
     return node
 
-def derive_utility_name(method: str, path: str, operation_id: Optional[str] = None) -> Tuple[str, str]:
-    # Clean version/prefix segments
-    path_clean = path.strip("/")
-    segments = path_clean.split("/")
-    
-    # Skip common version prefixes (v0, v1, api, etc.)
-    prefix_patterns = [r"^v[0-9]+$", r"^api$", r"^v[0-9]+\.[0-9]+$"]
-    while segments and any(re.match(pattern, segments[0], re.IGNORECASE) for pattern in prefix_patterns):
+
+def _is_param(seg: str) -> bool:
+    return seg.startswith("{") and seg.endswith("}")
+
+
+def derive_utility_name(
+    method: str,
+    path: str,
+    operation_id: Optional[str] = None,
+    sibling_methods: Tuple[str, ...] = (),
+) -> Tuple[str, str]:
+    """Return (resource, action).
+
+    operation_id is accepted for API compatibility and recorded as provenance by
+    the importer; it does not influence identity. sibling_methods lists the other
+    HTTP methods on the same path: a POST on a path that also serves GET is a
+    collection create (`/city/{c}/sessions`), a POST-only path ending in a word
+    after a parameter is an RPC action (`/session/{id}/kill`)."""
+    segments = [s for s in path.strip("/").split("/") if s]
+    while segments and any(re.match(p, segments[0], re.IGNORECASE) for p in _PREFIX_PATTERNS):
         segments.pop(0)
-        
     if not segments:
         return ("root", method.lower())
-        
-    # Filter parameter slots to get clean word segments
-    word_segments = [seg for seg in segments if not (seg.startswith("{") and seg.endswith("}"))]
-    if not word_segments:
-        # Fall back to segments if all segments were parameter slots
-        word_segments = [seg.replace("{", "").replace("}", "") for seg in segments]
-        
-    resource = word_segments[0]
-    
-    # Try to derive action
-    if operation_id:
-        # Extract camelCase/snake_case action prefix
-        # e.g., listCities -> list, nudgeSession -> nudge
-        # Find first lowercase word segment or verb
-        match = re.match(r"^([a-z]+)", operation_id)
-        if match:
-            action = match.group(1)
-            # If action matches resource name exactly, check verb
-            if action.lower() == resource.lower() and len(operation_id) > len(action):
-                # Fall back to method-based mapping if action is just resource name
-                pass
-            else:
-                # Map common action verbs to standardized names
-                verb_mapping = {
-                    "get": "read",
-                    "show": "read",
-                    "post": "create",
-                    "put": "update",
-                    "patch": "update"
-                }
-                action = verb_mapping.get(action.lower(), action)
-                return (resource, action)
-                
-    # Fallback to path segment structures + method
-    if len(word_segments) > 1:
-        # If segments has multiple names (e.g. sessions/nudge), action is the last segment
-        action = word_segments[-1]
-    else:
-        # Standard HTTP mapping
-        method_upper = method.upper()
-        if method_upper == "GET":
-            # If path ends with parameter slot (e.g. /{id}), it is a read. Otherwise list.
-            if segments[-1].startswith("{") and segments[-1].endswith("}"):
-                action = "read"
-            else:
-                action = "list"
-        elif method_upper == "POST":
-            action = "create"
-        elif method_upper in ("PUT", "PATCH"):
-            action = "update"
-        elif method_upper == "DELETE":
-            action = "delete"
-        else:
-            action = method.lower()
-            
-    return (resource, action)
+
+    words = [s for s in segments if not _is_param(s)]
+    if not words:
+        raise UtilityImportError(
+            f"Cannot derive a resource name for {method.upper()} {path}: "
+            "path has no literal segments; declare x-gluless-name"
+        )
+
+    m = method.upper()
+    ends_in_param = _is_param(segments[-1])
+    rpc_action = (
+        m == "POST"
+        and not ends_in_param
+        and len(segments) >= 2
+        and _is_param(segments[-2])
+        and "get" not in {x.lower() for x in sibling_methods}
+    )
+
+    if rpc_action:
+        return (".".join(words[:-1]), words[-1])
+    resource = ".".join(words)
+    if m == "GET":
+        return (resource, "read" if ends_in_param else "list")
+    if m == "POST":
+        return (resource, "create")
+    if m in ("PUT", "PATCH"):
+        return (resource, "update")
+    if m == "DELETE":
+        return (resource, "delete")
+    return (resource, m.lower())
+
+
+def _declared_side_effects(method: str, action: str) -> Tuple[SideEffectType, UtilityType]:
+    m = method.upper()
+    if m in ("GET", "HEAD", "OPTIONS"):
+        return SideEffectType.READ, UtilityType.READ
+    if m == "POST":
+        if action == "create":
+            return SideEffectType.CREATE, UtilityType.MUTATION
+        return SideEffectType.UNKNOWN, UtilityType.MUTATION
+    if m in ("PUT", "PATCH"):
+        return SideEffectType.UPDATE, UtilityType.MUTATION
+    if m == "DELETE":
+        return SideEffectType.DELETE, UtilityType.MUTATION
+    return SideEffectType.UNKNOWN, UtilityType.MUTATION
+
+
+def _merge_parameters(path_params: List[Any], op_params: List[Any]) -> List[Dict[str, Any]]:
+    """Operation-level parameters override path-level ones with the same (name, in)."""
+    merged: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for p in list(path_params) + list(op_params):
+        if isinstance(p, dict) and "name" in p:
+            merged[(p["name"], p.get("in", ""))] = p
+    return list(merged.values())
+
+
+def _json_schema(container: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not isinstance(container, dict):
+        return None
+    content = container.get("content")
+    if not isinstance(content, dict) or not content:
+        return None
+    media = content.get("application/json")
+    if media is None:
+        # first media type wins; the media type is recorded alongside the schema
+        media = next(iter(content.values()))
+    if isinstance(media, dict):
+        return media.get("schema")
+    return None
+
 
 class OpenAPIImporter:
     def __init__(self, default_namespace: str = "Default"):
         self.default_namespace = default_namespace
+        self.diagnostics: List[str] = []
 
-    def import_spec(self, spec_content: str) -> List[Utility]:
-        # Load content as YAML (YAML is a superset of JSON, so this handles both)
+    def import_spec(self, spec_content: str, source_uri: Optional[str] = None) -> List[Utility]:
+        self.diagnostics = []
         document = yaml.safe_load(spec_content)
-        if not isinstance(document, dict):
-            raise ValueError("Invalid OpenAPI document structure")
-            
-        # Determine namespace from custom x-provider-name or info title
-        namespace = self.default_namespace
-        if "x-provider-name" in document:
-            namespace = document["x-provider-name"]
-        elif "info" in document and isinstance(document["info"], dict) and "title" in document["info"]:
-            # Slugify info title as a fallback namespace
-            title = document["info"]["title"]
-            namespace = re.sub(r'[^a-zA-Z0-9]', '', title)
-            
-        utilities = []
-        paths = document.get("paths", {})
-        
-        for path, path_item in paths.items():
+        if not isinstance(document, dict) or "paths" not in document:
+            raise UtilityImportError("Invalid OpenAPI document structure: expected a mapping with 'paths'")
+
+        info = document.get("info") if isinstance(document.get("info"), dict) else {}
+        namespace = document.get("x-provider-name") or (
+            re.sub(r"[^a-zA-Z0-9]", "", str(info["title"])) if info.get("title") else self.default_namespace
+        )
+        doc_version = str(info.get("version", "0.0.0"))
+        doc_digest = hashlib.sha256(spec_content.encode("utf-8")).hexdigest()
+        doc_servers = [s.get("url") for s in document.get("servers", []) if isinstance(s, dict) and s.get("url")]
+        doc_security = document.get("security")  # None means "not declared"; [] means "explicitly none"
+        if "webhooks" in document:
+            self.diagnostics.append("webhooks are not imported")
+
+        utilities: List[Utility] = []
+        seen: Dict[str, str] = {}
+
+        for path, path_item in (document.get("paths") or {}).items():
             if not isinstance(path_item, dict):
                 continue
-                
-            # Keep path-level parameters
-            path_params = path_item.get("parameters", [])
-            
+            if "$ref" in path_item:
+                self.diagnostics.append(f"path-level $ref not supported, skipped: {path}")
+                continue
+            path_params = resolve_all_refs(path_item.get("parameters", []), document)
+            path_servers = [s.get("url") for s in path_item.get("servers", []) if isinstance(s, dict)]
+
             for method, operation in path_item.items():
-                if method.lower() in ("parameters", "$ref") or not isinstance(operation, dict):
+                if method.lower() not in HTTP_METHODS or not isinstance(operation, dict):
                     continue
-                    
-                # Clean and resolve refs inside the operation
-                op_resolved = resolve_all_refs(operation, document)
-                
-                # Combine path parameters and operation parameters
-                op_params = op_resolved.get("parameters", [])
-                combined_params = path_params + op_params
-                resolved_params = resolve_all_refs(combined_params, document)
-                
-                # Determine names
-                resource, action = derive_utility_name(method, path, op_resolved.get("operationId"))
-                
-                # Support overrides via extensions
-                custom_name = op_resolved.get("x-gluless-name")
+                op = resolve_all_refs(operation, document)
+                if op.get("x-gluless-exclude") is True:
+                    continue
+
+                siblings = tuple(k for k in path_item if k.lower() in HTTP_METHODS and k != method)
+                resource, action = derive_utility_name(method, path, op.get("operationId"), siblings)
+                ns = namespace
+                custom_name = op.get("x-gluless-name")
                 if custom_name:
-                    parts = custom_name.split(".")
+                    parts = str(custom_name).split(".")
                     if len(parts) >= 3:
-                        ns = parts[0]
-                        resource = parts[1]
-                        action = ".".join(parts[2:])
+                        ns, resource, action = parts[0], parts[1], ".".join(parts[2:])
                     elif len(parts) == 2:
-                        ns = namespace
-                        resource = parts[0]
-                        action = parts[1]
+                        resource, action = parts
                     else:
-                        ns = namespace
-                        action = custom_name
-                else:
-                    ns = namespace
-                    
+                        action = parts[0]
+
                 utility_id = f"{ns}.{resource}.{action}"
-                short_name = f"{resource}.{action}"
-                
-                # Determine SideEffectType and UtilityType
-                method_upper = method.upper()
-                if method_upper == "GET":
-                    side_effects = SideEffectType.READ
-                    utility_type = UtilityType.READ
-                elif method_upper == "POST":
-                    side_effects = SideEffectType.CREATE
-                    utility_type = UtilityType.MUTATION
-                elif method_upper in ("PUT", "PATCH"):
-                    side_effects = SideEffectType.UPDATE
-                    utility_type = UtilityType.MUTATION
-                elif method_upper == "DELETE":
-                    side_effects = SideEffectType.DELETE
-                    utility_type = UtilityType.MUTATION
-                else:
-                    side_effects = SideEffectType.UNKNOWN
-                    utility_type = UtilityType.MUTATION
-                    
-                # Support extension overrides for types and side effects
-                custom_type = op_resolved.get("x-gluless-type")
-                if custom_type:
+                location = f"{method.upper()} {path}"
+                if utility_id in seen:
+                    raise UtilityImportError(
+                        f"Duplicate utility id '{utility_id}' for {location} (already used by {seen[utility_id]}); "
+                        "declare x-gluless-name on one of them"
+                    )
+                seen[utility_id] = location
+
+                side_effects, utility_type = _declared_side_effects(method, action)
+                if op.get("x-gluless-type"):
                     try:
-                        utility_type = UtilityType(custom_type.lower())
-                    except ValueError:
-                        pass
-                        
-                custom_side_effects = op_resolved.get("x-gluless-side-effects")
-                if custom_side_effects:
+                        utility_type = UtilityType(str(op["x-gluless-type"]).lower())
+                    except ValueError as e:
+                        raise UtilityImportError(f"{location}: invalid x-gluless-type '{op['x-gluless-type']}'") from e
+                if op.get("x-gluless-side-effects"):
                     try:
-                        side_effects = SideEffectType(custom_side_effects.lower())
-                    except ValueError:
-                        pass
-                        
-                # Extract Request Body schema
-                req_body = op_resolved.get("requestBody")
-                resolved_req_body = None
-                if req_body and isinstance(req_body, dict):
-                    content = req_body.get("content", {})
-                    # Prefer application/json schema
-                    json_content = content.get("application/json", {})
-                    resolved_req_body = json_content.get("schema")
-                    
-                # Extract Responses schemas
-                responses = op_resolved.get("responses", {})
-                resolved_responses = {}
-                for status, resp in responses.items():
-                    if isinstance(resp, dict):
-                        content = resp.get("content", {})
-                        json_content = content.get("application/json", {})
-                        schema = json_content.get("schema")
-                        if schema:
-                            resolved_responses[status] = schema
-                        else:
-                            resolved_responses[status] = {"type": "object", "properties": {}}
-                            
-                # Transport Definition
+                        side_effects = SideEffectType(str(op["x-gluless-side-effects"]).lower())
+                    except ValueError as e:
+                        raise UtilityImportError(
+                            f"{location}: invalid x-gluless-side-effects '{op['x-gluless-side-effects']}'"
+                        ) from e
+
+                responses: Dict[str, Optional[Dict[str, Any]]] = {}
+                for status, resp in (op.get("responses") or {}).items():
+                    responses[str(status)] = _json_schema(resp) if isinstance(resp, dict) else None
+
+                op_servers = [s.get("url") for s in op.get("servers", []) if isinstance(s, dict)]
+                security = op["security"] if "security" in op else doc_security
+                if security is None:
+                    security = []
+
                 transport = UtilityTransport(
                     type="openapi",
-                    method=method_upper,
+                    method=method.upper(),
                     path=path,
-                    parameters=resolved_params,
-                    request_body=resolved_req_body,
-                    responses=resolved_responses
+                    parameters=_merge_parameters(path_params, op.get("parameters", [])),
+                    request_body=_json_schema(op.get("requestBody")),
+                    responses=responses,
+                    servers=op_servers or path_servers or doc_servers,
+                    deprecated=bool(op.get("deprecated", False)),
                 )
-                
-                # Auth requirements
-                security = op_resolved.get("security", document.get("security", []))
-                
-                utilities.append(Utility(
-                    id=utility_id,
-                    name=short_name,
-                    namespace=ns,
-                    description=op_resolved.get("summary") or op_resolved.get("description") or "",
-                    type=utility_type,
-                    side_effects=side_effects,
-                    transport=transport,
-                    auth=security
-                ))
-                
+                utilities.append(
+                    Utility(
+                        id=utility_id,
+                        name=f"{resource}.{action}",
+                        namespace=ns,
+                        description=op.get("summary") or op.get("description") or "",
+                        type=utility_type,
+                        side_effects=side_effects,
+                        transport=transport,
+                        auth=security,
+                        version=doc_version,
+                        provenance={
+                            "source_type": "openapi",
+                            "source_uri": source_uri or "",
+                            "source_version": doc_version,
+                            "source_digest": doc_digest,
+                            "operation_id": op.get("operationId") or "",
+                            "location": location,
+                        },
+                    )
+                )
         return utilities

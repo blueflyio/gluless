@@ -1,9 +1,11 @@
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
-from gluless.models import Goal, Limit, Utility, Contract
-from gluless.registry import UtilityRegistry
+from typing import Any, Dict, List
+
 from gluless.experience import ExperienceIndex
 from gluless.limits import LimitEvaluator
+from gluless.models import Contract, Goal, Limit, Utility
+from gluless.registry import UtilityRegistry
+
 
 @dataclass
 class ContextProjection:
@@ -30,7 +32,7 @@ class ContextResolver:
             expr = goal.expression.lower()
             # extract words/keys like 'cities', 'service', etc.
             goal_keywords.extend([w.strip().split(".")[0] for w in expr.split() if "." in w])
-        
+
         # 1. Fetch candidates from Registry
         candidates: List[Dict[str, Any]] = []
         for reg_id, ut_data in self.registry.utilities.items():

@@ -17,10 +17,10 @@ as an ordered list of rules, not as an unordered set.
 """
 
 import pytest
+
 from gluless.limits import LimitEvaluator
 from gluless.models import (
     Contract,
-    EvidenceRequirement,
     Goal,
     Limit,
     SideEffectType,

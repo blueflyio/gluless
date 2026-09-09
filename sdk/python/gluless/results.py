@@ -1,13 +1,15 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
+
 from gluless.evidence import Evidence
 from gluless.limits import LimitDecision
+
 
 @dataclass
 class Result:
     run: str
     contract: str
-    status: str  # "satisfied", "unsatisfied", "blocked", "failed", "indeterminate"
+    status: str  # "satisfied" | "blocked" | "waiting_for_approval" | "failed"
     goal: Dict[str, Any]
     invocations: List[Dict[str, Any]] = field(default_factory=list)
     limit_decisions: List[Dict[str, Any]] = field(default_factory=list)
@@ -23,8 +25,8 @@ class Result:
             return self.final_state
         try:
             return getattr(self, item)
-        except AttributeError:
-            raise KeyError(item)
+        except AttributeError as e:
+            raise KeyError(item) from e
 
 class ResultBuilder:
     """
@@ -49,6 +51,7 @@ class ResultBuilder:
                 "effect": ld.effect,
                 "utility": ld.utility,
                 "reason": ld.reason,
+                "limit_id": ld.limit_id,
                 "constraints": ld.constraints
             })
 

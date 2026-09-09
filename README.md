@@ -151,6 +151,24 @@ allow Work.tasks.read   ← overrides for this specific utility → ALLOWED
 
 Everything else only matched `deny *` → DENIED. Neither guess nor model judgment. The runtime decides.
 
+Selectors name what they govern. There is no substring matching:
+
+```text
+*                     everything
+Work.*                a namespace or prefix
+Work.tasks.claim      one utility id
+claim                 a bare word: the final id segment, a side-effect class
+                      (read, create, update, delete, external_message, ...)
+                      or a utility type (read, mutation)
+```
+
+`require approval for <selector>` is a third effect. The run stops with status
+`waiting_for_approval` instead of executing; resuming after approval is not yet implemented.
+
+A utility whose side effect is `unknown` (an RPC-style POST such as `.../{id}/kill` that
+carries no `x-gluless-side-effects`) is denied unless a limit names it. Unknown never
+inherits the authority of `create`.
+
 ---
 
 ## Utilities
@@ -723,18 +741,43 @@ snapshots
 
 ---
 
+# Where GluLess sits in the Bluefly stack
+
+GluLess is not an agent definition, a discovery protocol, or a policy engine.
+
+```text
+OSSA           defines the agent: identity, capabilities, tools, policy bindings
+DUADP          finds the agent
+MCP / A2A      connect the agent to tools and to other agents
+GluLess        states the governed outcome an agent is asked to achieve:
+               Goal, Limits, Utilities, and the evidence that proves completion
+Cedar /        decide whether a proposed action is authorized and record the
+ContractPlane  decision; GluLess Limits bind to them, they do not replace them
+Runtime        executes
+```
+
+An OSSA agent can accept a GluLess contract as its unit of work. A GluLess Utility can be
+an OSSA agent reached through A2A and discovered through DUADP. The word "contract" in
+GluLess means the executable outcome contract; ContractPlane is the enforcement and
+evidence plane that GluLess Limits delegate to.
+
+---
+
 # Status
 
-The MVP vertical slice is **proven**.
+The MVP vertical slice runs end to end against a mock API under test (`sdk/python/tests`).
 
 ```text
 RESOLVE    Utilities projected from OpenAPI via OpenAPIImporter → UtilityRegistry
 FILTER     Goal-relevant candidates selected by capability domain
 AUTHORIZE  Limits evaluated in declaration order (last match wins); mutations denied by default
 EXECUTE    Real HTTP call; real response
-VERIFY     Schema validation, goal predicate, cryptographic evidence
-RESULT     PROVEN
+VERIFY     Goal predicate re-observed from the API; content-addressed evidence (SHA-256)
+RESULT     satisfied | blocked | waiting_for_approval | failed
 ```
+
+Not yet done: response schema validation, `.glu` parser, a planner beyond "first
+mutation utility", approval resume, MCP and A2A adapters, a canonical IR schema.
 
 The implementation proved three things:
 
@@ -742,7 +785,11 @@ The implementation proved three things:
 2. Goals and Limits govern agent-selected execution — the runtime decides, not the model.
 3. Execution is observable and auditable — every decision is traceable to a limit, a utility, and an evidence record.
 
-Next: MCP tool adapter, A2A agent adapter, approval lifecycle, `.glu` parser.
+Next: canonical IR schema, MCP tool adapter, A2A agent adapter, approval resume, `.glu` parser.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
 
 ---
 
