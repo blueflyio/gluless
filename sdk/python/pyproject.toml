@@ -6,7 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "gluless"
 version = "0.1.0"
 description = "An agent-native executable contract language and runtime"
-readme = "../../README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
 dependencies = [
@@ -14,6 +13,9 @@ dependencies = [
     "ag-ui-protocol>=0.1.22",
     "lark>=1.2.0",
 ]
+
+[project.scripts]
+gluless = "gluless.cli:main"
 
 [project.optional-dependencies]
 dev = [
