@@ -776,8 +776,11 @@ VERIFY     Goal predicate re-observed from the API; content-addressed evidence (
 RESULT     satisfied | blocked | waiting_for_approval | failed
 ```
 
-Not yet done: response schema validation, `.glu` parser, a planner beyond "first
+Not yet done: response schema validation, a planner beyond "first
 mutation utility", approval resume, MCP and A2A adapters, a canonical IR schema.
+
+The `.glu` parser (`sdk/python/gluless/parser.py`) is syntax-only: Goal, Limits,
+Utilities, and Evidence blocks become `models.py` IR. No semantic validation.
 
 The implementation proved three things:
 
@@ -785,7 +788,7 @@ The implementation proved three things:
 2. Goals and Limits govern agent-selected execution — the runtime decides, not the model.
 3. Execution is observable and auditable — every decision is traceable to a limit, a utility, and an evidence record.
 
-Next: canonical IR schema, MCP tool adapter, A2A agent adapter, approval resume, `.glu` parser.
+Next: canonical IR schema, MCP tool adapter, A2A agent adapter, approval resume.
 
 ## License
 
