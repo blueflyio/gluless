@@ -2,19 +2,27 @@
 
 > An agent-native executable contract language and runtime built around Goal, Limits, and Utilities.
 
-This repository contains the specification, Intermediate Representation (IR), and reference runtime parser/evaluator for the GluLess language.
+GluLess lets humans and agents declare a Goal, Limits, and Utilities. The runtime resolves, filters, authorizes, executes, and verifies — without glue code.
 
 ## Core
 
-- [README](README.md): human-facing purpose, mission, and architectural diagram
-- [OWNERSHIP](OWNERSHIP.md): mission, capability boundaries, and upstream authorities
+- [README](README.md): purpose, model, pipeline, and current status
+- [OWNERSHIP](OWNERSHIP.md): what GluLess owns, upstream authorities, extension boundary
+- [AGENTS](AGENTS.md): agent operating contract, decision rules, repo layout
 
 ## Specification
 
-- [VISION](docs/VISION.md): project instructions, API-first rules, and testing principles
-- [gluless-specification](docs/gluless-specification.md): core language primitives, type system, computational model, and non-negotiable invariants
-- [Research whitepaper](docs/whitepapers/gluless_whitepaper_draft.md): research draft detailing adjacent standards, the semantic model, and canonical IR example
+- [gluless-specification](docs/gluless-specification.md): language primitives, type system, computational model, invariants
+- [VISION](docs/VISION.md): design principles, API-first rules, testing mandate
 
-## Development
+## Architecture
 
-- [AGENTS](AGENTS.md): agent operating contract, decision rules, and required tests
+- [connections-and-plugins](docs/connections-and-plugins.md): importers, registry modes, transport bindings, all API endpoints, how to add a new provider
+
+## Agent
+
+- [AGENT](`.agents/agents/glu-agent/AGENT.md`): wire spec for the reference GLU agent — endpoints, AG-UI events, state shape, contract format
+
+## Research
+
+- [whitepaper](docs/whitepapers/gluless_whitepaper_draft.md): adjacent standards, semantic model, canonical IR

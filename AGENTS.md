@@ -6,202 +6,156 @@
 
 **GLU = Goal · Limits · Utilities**
 
-The core thesis is:
-
 > **The contract is the program. No glue required.**
 
 GluLess lets humans and agents declare:
-- the **Goal** — what must become true;
-- the **Limits** — what authority, constraints, policy, approvals, and invariants govern execution;
-- the **Utilities** — what APIs, tools, agents, services, models, resources, and event sources are available.
+- the **Goal** — what must become true
+- the **Limits** — what authority, constraints, policy, and invariants govern execution
+- the **Utilities** — what APIs, tools, agents, and services are available
 
-The runtime determines the execution path.
+The runtime determines the execution path. The model does not self-authorize.
 
 ---
 
-## MVP Engineering Directive
+## Repository layout
 
-Build the MVP using the **GluLess principle**:
+```
+sdk/python/gluless/       Core SDK: models, compiler, registry, limits, context,
+                          bindings, evidence, experience, importers/
+sdk/python/tests/         Test suite (pytest)
+api/openapi.yaml          Example API spec — annotated with x-gluless-* extensions
+mock/mock_server.py       Mock API server (port 8000) for local canary runs
+.agents/agents/glu-agent/ Reference AG-UI agent implementation (port 8080)
+demo/                     Browser demo UI (no build step)
+docs/                     Architecture docs and specification
+```
+
+---
+
+## Engineering directive
+
+Build the MVP using the GluLess principle:
 
 **GLU = Goal · Limits · Utilities**
 
-The engineering objective is not to generate more code. It is to reduce glue between intent and execution.
+The objective is not to generate more code. It is to reduce glue between intent and execution.
 
-### Goal
+### Decision order
 
-Ship the smallest working vertical slice that creates real product value, proves real agent execution, and makes the next capability easier to add than the first.
-
-Favor:
-* working outcomes over architecture expansion
-* API-first execution
-* CRUD and stable interfaces
-* reusable shared components
-* test-driven development
-* deterministic CI/CD
-* observable execution
-* low operational burden
-* evidence-backed completion
-
-Do not confuse infrastructure growth with product progress.
-
-### Limits
-
-Stay inside these engineering constraints:
-* Do not build around Gas City. **Use and improve Gas City APIs and services.**
-* Do not create scripts, services, databases, wrappers, or side paths when an existing interface can do the job.
-* Do not couple application behavior directly to filesystem layout, shell commands, databases, internal ports, or implementation details when a stable API can own that contract.
-* Do not duplicate schemas, API clients, auth logic, error handling, configuration, models, or UI behavior.
-* Do not introduce a new abstraction unless it removes real duplication or establishes a necessary stable boundary.
-* Do not accept “should work” as completion. Prove behavior with tests and runtime evidence.
-* Do not make Thomas the orchestration layer. Automate repeatable work behind governed interfaces.
-
-Use this decision order:
-```text
-DELETE
-→ CONFIGURE
-→ COMPOSE
-→ REUSE
-→ EXTEND
-→ CREATE
+```
+DELETE → CONFIGURE → COMPOSE → REUSE → EXTEND → CREATE
 ```
 
 Before creating anything new, answer:
-```text
-DOES\_API\_EXIST=
-DOES\_SERVICE\_EXIST=
-DOES\_SHARED\_COMPONENT\_EXIST=
-DOES\_GAS\_CITY\_CAPABILITY\_EXIST=
-DOES\_STANDARD\_OR\_PROTOCOL\_EXIST=
-CAN\_EXISTING\_OWNER\_BE\_EXTENDED=
+
+```
+DOES_API_EXIST=
+DOES_PROTOCOL_EXIST=
+DOES_LIBRARY_EXIST=
+CAN_EXISTING_OWNER_BE_EXTENDED=
 ```
 
-If yes, use it. If incomplete, extend it. Only create something new when a real gap is proven.
+If yes, use it. If incomplete, extend it. Only create when a real gap is proven.
 
-### Utilities
+### Limits (what agents must not do)
 
-Treat every existing service, API, tool, agent, library, shared component, and protocol as a potential **Utility**.
+- Do not duplicate schemas, API clients, models, or utility metadata
+- Do not add a new abstraction unless it removes real duplication or establishes a stable boundary
+- Do not accept "should work" as completion — prove behavior with tests and runtime evidence
+- Do not build around existing APIs — use them; if incomplete, extend them
 
-Prefer stable capabilities such as:
-```text
-GasCity.sessions.list
-GasCity.sessions.nudge
-GasCity.events.stream
-GitLab.mergeRequest.create
-Execution.run
+### Utilities (prefer stable capabilities over implementation-specific behavior)
+
+Prefer:
+```
+Monitoring.services.list
+Work.tasks.claim
+Deployment.status
 Memory.search
+GitLab.mergeRequest.create
 ```
-over implementation-specific behavior such as:
-```text
+
+Over:
+```
 run shell command
 read internal file
 query database directly
 call undocumented port
-duplicate REST wrapper
-create another local service
 ```
-
-Utilities should expose clear contracts:
-```text
-INPUT=
-OUTPUT=
-AUTHORITY=
-SIDE\_EFFECTS=
-ERRORS=
-VERSION=
-```
-The client should care about the capability, not the implementation behind it.
 
 ---
 
-## Engineering Model
+## Engineering model
 
 Think in this order:
-```text
-GOAL
-What must become true?
 
-LIMITS
-What rules, authority, constraints, and approvals apply?
-
-UTILITIES
-What existing capabilities can achieve it?
-
-EXECUTION
-What is the smallest valid path?
-
-EVIDENCE
-What proves it worked?
+```
+GOAL      — What must become true?
+LIMITS    — What rules, authority, and constraints apply?
+UTILITIES — What existing capabilities can achieve it?
+EXECUTION — What is the smallest valid path?
+EVIDENCE  — What proves it worked?
 ```
 
-Do not begin with: **"What code should I write?"**  
-Begin with: **"What capability already exists that moves the Goal forward?"**
+Do not begin with "What code should I write?"  
+Begin with "What capability already exists that moves the Goal forward?"
 
 ---
 
-## Agent Working Rules
+## Agent working rules
 
 When modifying this repository:
 
-1. inspect current source before proposing architecture;
-2. identify the existing owner of behavior;
-3. reuse before creating;
-4. write/update tests first for semantic changes (TDD);
-5. make the smallest implementation change;
-6. run relevant tests (pytest);
-7. run the full suite before completion;
-8. update docs when semantics change;
-9. report evidence, not confidence.
+1. Read current source before proposing architecture
+2. Identify the existing owner of the behavior
+3. Reuse before creating
+4. Write/update tests first for semantic changes (TDD)
+5. Make the smallest valid implementation change
+6. Run relevant tests (`pytest sdk/python/tests/`)
+7. Run the full suite before marking complete
+8. Update docs when semantics change
+9. Report evidence, not confidence
 
 ---
 
-## Evidence Reporting (Hard Rule)
+## Evidence reporting (hard rule)
 
-Completion requires proof. For each task report, you must include the following metadata:
+Completion requires proof. For each task report:
 
-### For each capability report:
-```text
+### Capability
+```
 GOAL=
 UTILITY=
-LIMITS\_CHECKED=
+LIMITS_CHECKED=
 REQUEST=
-REAL\_RESPONSE=
+REAL_RESPONSE=
 TEST=
 RESULT=
 EVIDENCE=
 ```
 
-### For mutations:
-```text
+### Mutations
+```
 AUTHORITY=
-SIDE\_EFFECT=
-STATE\_BEFORE=
-STATE\_AFTER=
+SIDE_EFFECT=
+STATE_BEFORE=
+STATE_AFTER=
 EVIDENCE=
 ```
 
-### For streams:
-```text
-CONNECTED=
-EVENT\_RECEIVED=
-EVENT\_RENDERED=
-RECONNECT=
-```
-
-A compile is not proof. A rendered screen is not proof. An agent saying “done” is not proof.
+A compile is not proof. A rendered screen is not proof. An agent saying "done" is not proof.
 
 ---
 
-## Decision Rule
+## Decision rule
 
 When uncertain, favor the option that creates:
-- fewer concepts;
-- fewer dependencies;
-- fewer services;
-- fewer hidden behaviors;
-- stronger interfaces;
-- better tests;
-- clearer authority;
-- easier replacement;
-- more observable execution.
+- fewer concepts
+- fewer dependencies
+- fewer hidden behaviors
+- stronger interfaces
+- better tests
+- clearer authority
+- more observable execution
 
 GluLess should remove glue, not become another layer of it.

@@ -1,6 +1,7 @@
-import os
 import json
-from typing import Dict, Any, List, Optional
+import os
+from typing import Any, Dict, Optional
+
 
 class ExperienceIndex:
     """
@@ -8,13 +9,18 @@ class ExperienceIndex:
     Assists ContextResolver in ranking compatible bindings dynamically.
     """
     def __init__(self, index_path: Optional[str] = None):
-        if not index_path:
-            self.index_path = os.path.expanduser("~/.gluless/experience_index.json")
-        else:
-            self.index_path = index_path
-
-        self._ensure_dir()
+        """index_path: file to persist to, or ":memory:" (default) for a
+        per-process index that never touches disk. Callers that want the
+        conventional persistent location pass ExperienceIndex.default_path()."""
+        self._in_memory = not index_path or index_path == ":memory:"
+        self.index_path = ":memory:" if self._in_memory else index_path
+        if not self._in_memory:
+            self._ensure_dir()
         self.experience: Dict[str, Dict[str, Any]] = self._load()
+
+    @staticmethod
+    def default_path() -> str:
+        return os.path.join(os.environ.get("GLULESS_HOME", os.path.expanduser("~/.gluless")), "experience_index.json")
 
     def _ensure_dir(self):
         dir_name = os.path.dirname(self.index_path)
@@ -22,6 +28,8 @@ class ExperienceIndex:
             os.makedirs(dir_name, exist_ok=True)
 
     def _load(self) -> Dict[str, Dict[str, Any]]:
+        if self._in_memory:
+            return {}
         if os.path.exists(self.index_path):
             try:
                 with open(self.index_path, "r", encoding="utf-8") as f:
@@ -31,6 +39,8 @@ class ExperienceIndex:
         return {}
 
     def save(self):
+        if self._in_memory:
+            return
         self._ensure_dir()
         with open(self.index_path, "w", encoding="utf-8") as f:
             json.dump(self.experience, f, indent=2)
@@ -58,11 +68,11 @@ class ExperienceIndex:
 
         data = self.experience[utility_id]
         data["executions"] += 1
-        
+
         if success:
             data["successful_invocations"] += 1
             data["goal_contributing"] += 1  # For simple counting in POC
-            
+
         data["latencies"].append(latency)
         # Compute median latency
         sorted_lats = sorted(data["latencies"])
@@ -90,16 +100,16 @@ class ExperienceIndex:
             "success_rate": 1.0,
             "median_latency": 0.0
         }
-        
+
         record = self.experience.get(utility_id)
         if not record:
             return default_stats
-            
+
         success_rate = (
             record["successful_invocations"] / record["executions"]
             if record["executions"] > 0 else 1.0
         )
-        
+
         return {
             "utility_id": utility_id,
             "executions": record["executions"],

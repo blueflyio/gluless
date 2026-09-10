@@ -1,0 +1,21 @@
+id: glu-demo-contract
+goals:
+  - id: goal-list-services
+    expression: "services.listed == true"
+    description: "List all services and verify they are reachable"
+
+limits:
+  - id: limit-deny-all
+    action_pattern: "deny *"
+    description: "Deny any action not explicitly permitted"
+  - id: limit-allow-list
+    action_pattern: "allow Monitoring.services.list"
+    description: "Permit listing services — read-only, no side effects"
+
+utilities:
+  - Monitoring.services.list
+
+evidence_requirements:
+  - id: ev-http-ok
+    assertion: "response.status == 200"
+    description: "Service API responded with HTTP 200"

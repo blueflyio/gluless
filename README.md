@@ -46,39 +46,33 @@ GluLess aims to reduce that layer by making stable capabilities and executable c
 Instead of:
 
 ```python
-response = requests.get("/v0/cities")
-response.raise\_for\_status()
-cities = response.json()
+response = requests.get("/services")
+response.raise_for_status()
+services = response.json()
 
-for city in cities:
-    if city["health"] != "healthy":
+for s in services:
+    if s["status"] != "healthy":
         ...
 ```
 
-GluLess should support something closer to:
+GluLess supports:
 
 ```glu
-goal BluCityHealthy {
+goal ServicesHealthy {
     target:
-        City("blucity").health == healthy
+        services.healthy == true
 
     limits:
-        allow GasCity.health.read
-        allow GasCity.sessions.inspect
-        require approval for GasCity.sessions.restart
-
-        never expose secrets
-        preserve active\_work
+        deny *
+        allow Monitoring.services.list
 
     utilities:
-        GasCity.health
-        GasCity.sessions
-        GasCity.events
+        Monitoring.services.list
 
     evidence:
-        health
-        actions
-        events
+        response.status == 200
+        response.schema valid
+        services observed
 }
 ```
 
@@ -138,16 +132,42 @@ Example:
 
 ```glu
 limits {
-    allow Work.read
-    allow Work.claim
-
-    require approval for Production.deploy
-
+    deny *
+    allow Work.tasks.read
+    allow Work.tasks.claim
+    require approval for Deployment.promote
     deny Infrastructure.destroy
 }
 ```
 
 Limits are enforced by the runtime, not left to model judgment alone.
+
+The evaluation model is **declaration order, last match wins**:
+
+```text
+deny *                  ← matches everything
+allow Work.tasks.read   ← overrides for this specific utility → ALLOWED
+```
+
+Everything else only matched `deny *` → DENIED. Neither guess nor model judgment. The runtime decides.
+
+Selectors name what they govern. There is no substring matching:
+
+```text
+*                     everything
+Work.*                a namespace or prefix
+Work.tasks.claim      one utility id
+claim                 a bare word: the final id segment, a side-effect class
+                      (read, create, update, delete, external_message, ...)
+                      or a utility type (read, mutation)
+```
+
+`require approval for <selector>` is a third effect. The run stops with status
+`waiting_for_approval` instead of executing; resuming after approval is not yet implemented.
+
+A utility whose side effect is `unknown` (an RPC-style POST such as `.../{id}/kill` that
+carries no `x-gluless-side-effects`) is denied unless a limit names it. Unknown never
+inherits the authority of `create`.
 
 ---
 
@@ -178,7 +198,7 @@ A Utility describes what can be done, not how it is implemented internally.
 For example:
 
 ```text
-GasCity.sessions.list
+Monitoring.services.list
 ```
 
 may resolve to an HTTP API today and a different transport later without changing the GluLess contract.
@@ -224,6 +244,28 @@ It makes them implementation details behind capabilities.
 
 ---
 
+# Pipeline
+
+Every contract execution runs through five stages:
+
+```text
+RESOLVE   → project Utilities from registry (OpenAPI importer → UtilityRegistry)
+FILTER    → retain only goal-relevant candidates (capability domain match)
+AUTHORIZE → evaluate each candidate against Limits (declaration order, last match wins)
+EXECUTE   → invoke permitted Utilities via real HTTP / MCP / A2A bindings
+VERIFY    → evaluate evidence requirements and goal predicate against world state
+```
+
+Final states:
+
+```text
+PROVEN      all evidence requirements satisfied; goal predicate true
+UNRESOLVED  execution failed, evidence incomplete, or goal predicate false
+DENIED      no Utility survived AUTHORIZE; execution never reached
+```
+
+---
+
 # API First
 
 GluLess favors stable machine-readable interfaces.
@@ -262,10 +304,10 @@ Do not build around it.
 A contract should depend on:
 
 ```text
-Work.list
-GasCity.sessions.nudge
+Work.tasks.list
+Monitoring.services.inspect
 Memory.search
-Deployment.inspect
+Deployment.status
 ```
 
 not on:
@@ -391,7 +433,7 @@ Human approval is a first-class execution state.
 An execution may enter:
 
 ```text
-WAITING\_FOR\_APPROVAL
+WAITING_FOR_APPROVAL
 ```
 
 with:
@@ -507,23 +549,16 @@ Interface compatibility is what matters.
 
 # OpenAPI First
 
-The first Utility adapter should be OpenAPI.
+The first Utility adapter is OpenAPI.
 
-Given:
-
-```text
-GET  /v0/cities
-POST /v0/sessions/{id}/nudge
-```
-
-GluLess should be able to expose:
+Given any OpenAPI spec, GluLess derives typed Utilities:
 
 ```text
-GasCity.cities.list
-GasCity.sessions.nudge
+GET  /services        →  Monitoring.services.list
+POST /deployments     →  Deployment.deployments.create
 ```
 
-The importer should derive where possible:
+The importer derives:
 
 ```text
 operation id
@@ -536,15 +571,20 @@ authentication requirements
 error responses
 ```
 
+Per-operation `x-gluless-name` / `x-gluless-type` / `x-gluless-side-effects` extensions
+allow the API contract to declare its GluLess identity. The OpenAPI spec is an
+authoritative API contract, not an independent GluLess registry. The importer
+projects it into the runtime registry.
+
 Do not hand-code duplicate models when the source interface already defines them.
 
 ---
 
 # Initial MVP
 
-The first implementation should remain intentionally small.
+The first implementation is intentionally small.
 
-Initial scope:
+In scope:
 
 ```text
 Parser
@@ -553,7 +593,7 @@ Validator
 OpenAPI Utility importer
 Utility registry
 Goal evaluator
-Limits validator
+Limits evaluator (declaration order, last match wins)
 Simple planner
 HTTP executor
 Event log
@@ -584,13 +624,13 @@ Reuse existing systems instead.
 
 # First Vertical Slice
 
-Do not expand scope before this works:
+Do not expand scope before this works end-to-end:
 
 ```text
 OpenAPI document
 → import operation
 → produce typed Utility
-→ parse .glu contract
+→ parse contract
 → validate
 → resolve Utility
 → execute HTTP request
@@ -601,34 +641,20 @@ OpenAPI document
 → return structured result
 ```
 
-Example:
-
-```glu
-goal BluCityExists {
-    utilities:
-        GasCity.cities.list
-
-    success:
-        cities.exists(name == "blucity")
-}
-```
-
 Required proof:
 
 ```text
 PARSE=PASS
 TYPECHECK=PASS
-UTILITY\_IMPORT=PASS
-UTILITY\_RESOLUTION=PASS
-HTTP\_EXECUTION=PASS
-RESPONSE\_VALIDATION=PASS
-GOAL\_EVALUATION=PASS
+UTILITY_IMPORT=PASS
+UTILITY_RESOLUTION=PASS
+HTTP_EXECUTION=PASS
+RESPONSE_VALIDATION=PASS
+GOAL_EVALUATION=PASS
 EVENTS=PASS
 EVIDENCE=PASS
-RESULT=PASS
+RESULT=PROVEN
 ```
-
-Only after this vertical slice is solid should additional protocols or advanced planning be added.
 
 ---
 
@@ -648,12 +674,11 @@ DELETE
 Before adding code, ask:
 
 ```text
-DOES\_STANDARD\_EXIST=
-DOES\_PROTOCOL\_EXIST=
-DOES\_LIBRARY\_EXIST=
-DOES\_API\_EXIST=
-DOES\_SHARED\_OWNER\_EXIST=
-CAN\_EXISTING\_OWNER\_BE\_EXTENDED=
+DOES_STANDARD_EXIST=
+DOES_PROTOCOL_EXIST=
+DOES_LIBRARY_EXIST=
+DOES_API_EXIST=
+CAN_EXISTING_OWNER_BE_EXTENDED=
 ```
 
 Only create something new after a real gap is established.
@@ -680,7 +705,7 @@ IR serialization
 type validation
 Utility import
 Utility resolution
-Limits enforcement
+Limits enforcement (declaration order, last match wins)
 authority
 Goal evaluation
 HTTP execution
@@ -716,17 +741,58 @@ snapshots
 
 ---
 
+# Where GluLess sits in the Bluefly stack
+
+GluLess is not an agent definition, a discovery protocol, or a policy engine.
+
+```text
+OSSA           defines the agent: identity, capabilities, tools, policy bindings
+DUADP          finds the agent
+MCP / A2A      connect the agent to tools and to other agents
+GluLess        states the governed outcome an agent is asked to achieve:
+               Goal, Limits, Utilities, and the evidence that proves completion
+Cedar /        decide whether a proposed action is authorized and record the
+ContractPlane  decision; GluLess Limits bind to them, they do not replace them
+Runtime        executes
+```
+
+An OSSA agent can accept a GluLess contract as its unit of work. A GluLess Utility can be
+an OSSA agent reached through A2A and discovered through DUADP. The word "contract" in
+GluLess means the executable outcome contract; ContractPlane is the enforcement and
+evidence plane that GluLess Limits delegate to.
+
+---
+
 # Status
 
-GluLess is currently a concept and proposed language/runtime architecture.
+The MVP vertical slice runs end to end against a mock API under test (`sdk/python/tests`).
 
-The first implementation should prove three things:
+```text
+RESOLVE    Utilities projected from OpenAPI via OpenAPIImporter → UtilityRegistry
+FILTER     Goal-relevant candidates selected by capability domain
+AUTHORIZE  Limits evaluated in declaration order (last match wins); mutations denied by default
+EXECUTE    Real HTTP call; real response
+VERIFY     Goal predicate re-observed from the API; content-addressed evidence (SHA-256)
+RESULT     satisfied | blocked | waiting_for_approval | failed
+```
 
-1. APIs can become typed Utilities.
-2. Goals and Limits can govern agent-selected execution.
-3. Execution can remain observable and auditable without requiring humans to specify every implementation step.
+Not yet done: response schema validation, a planner beyond "first
+mutation utility", approval resume, MCP and A2A adapters, a canonical IR schema.
 
-If those hold, GluLess should grow from evidence rather than speculation.
+The `.glu` parser (`sdk/python/gluless/parser.py`) is syntax-only: Goal, Limits,
+Utilities, and Evidence blocks become `models.py` IR. No semantic validation.
+
+The implementation proved three things:
+
+1. APIs become typed Utilities via the OpenAPI importer — no hand-coded metadata.
+2. Goals and Limits govern agent-selected execution — the runtime decides, not the model.
+3. Execution is observable and auditable — every decision is traceable to a limit, a utility, and an evidence record.
+
+Next: canonical IR schema, MCP tool adapter, A2A agent adapter, approval resume.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
 
 ---
 

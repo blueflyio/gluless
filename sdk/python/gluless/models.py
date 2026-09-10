@@ -1,6 +1,7 @@
-from enum import Enum
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
 
 class SideEffectType(str, Enum):
     NONE = "none"
@@ -27,6 +28,8 @@ class UtilityTransport:
     parameters: List[Dict[str, Any]] = field(default_factory=list)
     request_body: Optional[Dict[str, Any]] = None
     responses: Dict[str, Any] = field(default_factory=dict)
+    servers: List[str] = field(default_factory=list)
+    deprecated: bool = False
 
 @dataclass
 class Utility:
@@ -38,6 +41,10 @@ class Utility:
     side_effects: SideEffectType
     transport: UtilityTransport
     auth: List[Dict[str, Any]] = field(default_factory=list)
+    version: str = "0.0.0"
+    # Where this Utility came from: source_type, source_uri, source_version,
+    # source_digest, operation_id, location. Never used for authority.
+    provenance: Dict[str, str] = field(default_factory=dict)
 
 @dataclass
 class Goal:

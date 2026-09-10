@@ -1,6 +1,5 @@
-import pytest
 from gluless.importers.openapi import OpenAPIImporter, derive_utility_name
-from gluless.models import UtilityType, SideEffectType
+from gluless.models import SideEffectType, UtilityType
 
 # Mock OpenAPI specification
 MOCK_OPENAPI_SPEC = """
@@ -96,16 +95,16 @@ components:
 def test_derive_utility_name():
     # Test listCities (GET /v0/cities)
     assert derive_utility_name("GET", "/v0/cities", "listCities") == ("cities", "list")
-    
+
     # Test nudgeSession (POST /v0/sessions/{id}/nudge)
     assert derive_utility_name("POST", "/v0/sessions/{id}/nudge", "nudgeSession") == ("sessions", "nudge")
-    
+
     # Test getUser (GET /v0/users/{id})
     assert derive_utility_name("GET", "/v0/users/{id}", "getUser") == ("users", "read")
-    
+
     # Test custom POST without operationId
     assert derive_utility_name("POST", "/v0/tasks") == ("tasks", "create")
-    
+
     # Test custom DELETE
     assert derive_utility_name("DELETE", "/v0/tasks/{id}") == ("tasks", "delete")
 
@@ -113,13 +112,13 @@ def test_derive_utility_name():
 def test_openapi_importer():
     importer = OpenAPIImporter()
     utilities = importer.import_spec(MOCK_OPENAPI_SPEC)
-    
+
     # We should have 4 utilities parsed
     assert len(utilities) == 4
-    
+
     # Build a lookup map of utilities by ID
     util_map = {u.id: u for u in utilities}
-    
+
     # 1. Check listCities (GET /v0/cities)
     assert "GasCity.cities.list" in util_map
     util_cities = util_map["GasCity.cities.list"]
@@ -128,30 +127,30 @@ def test_openapi_importer():
     assert util_cities.type == UtilityType.READ
     assert util_cities.side_effects == SideEffectType.READ
     assert util_cities.description == "List all healthy cities"
-    
+
     # Check that $ref to City schema was correctly resolved
     response_200 = util_cities.transport.responses["200"]
     assert response_200["type"] == "array"
     assert response_200["items"]["type"] == "object"
     assert "name" in response_200["items"]["properties"]
     assert "health" in response_200["items"]["properties"]
-    
+
     # 2. Check nudgeSession (POST /v0/sessions/{id}/nudge)
     assert "GasCity.sessions.nudge" in util_map
     util_nudge = util_map["GasCity.sessions.nudge"]
     assert util_nudge.type == UtilityType.MUTATION
-    assert util_nudge.side_effects == SideEffectType.CREATE
+    assert util_nudge.side_effects == SideEffectType.UNKNOWN  # RPC-style POST never inherits CREATE authority
     assert len(util_nudge.transport.parameters) == 1
     assert util_nudge.transport.parameters[0]["name"] == "id"
     assert util_nudge.transport.request_body["type"] == "object"
     assert "force" in util_nudge.transport.request_body["properties"]
-    
+
     # 3. Check getUser (GET /v0/users/{id})
     assert "GasCity.users.read" in util_map
     util_user = util_map["GasCity.users.read"]
     assert util_user.type == UtilityType.READ
     assert util_user.side_effects == SideEffectType.READ
-    
+
     # 4. Check custom override (POST /v0/custom-endpoint)
     assert "CustomNS.custom_resource.custom_action" in util_map
     util_custom = util_map["CustomNS.custom_resource.custom_action"]

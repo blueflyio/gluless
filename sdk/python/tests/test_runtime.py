@@ -1,13 +1,16 @@
+from typing import Any, Dict
+
 import pytest
-from typing import Dict, Any
-from gluless.models import Contract, Goal, Limit, Utility, UtilityType, SideEffectType, UtilityTransport
-from gluless.runtime import GluLessRuntime, LimitViolationError, GoalUnsatisfiableError
-from ag_ui.core import EventType, BaseEvent
+from ag_ui.core import BaseEvent, EventType
+
+from gluless.models import Contract, Goal, Limit, SideEffectType, Utility, UtilityTransport, UtilityType
+from gluless.runtime import GluLessRuntime, LimitViolationError
+
 
 def test_runtime_success_execution():
     # Define a goal: service.health == healthy
     goal = Goal(id="goal-1", expression="service.health == healthy")
-    
+
     # Define a utility to update status
     utility = Utility(
         id="deployment.update",
@@ -18,11 +21,11 @@ def test_runtime_success_execution():
         side_effects=SideEffectType.UPDATE,
         transport=UtilityTransport(type="openapi", method="POST", path="/update")
     )
-    
+
     contract = Contract(
         id="contract-1",
         goals=[goal],
-        limits=[],
+        limits=[Limit(id="permit-update", action_pattern="allow deployment.update")],
         utilities=[utility]
     )
 
@@ -52,10 +55,10 @@ def test_runtime_success_execution():
 
     assert res["status"] == "success"
     assert res["final_state"]["service"]["health"] == "healthy"
-    
+
     # Verify emitted AG-UI events
     event_types = [e.type for e in emitted_events]
-    
+
     assert EventType.RUN_STARTED in event_types
     assert EventType.STEP_STARTED in event_types
     assert EventType.STATE_SNAPSHOT in event_types
@@ -69,7 +72,7 @@ def test_runtime_success_execution():
 def test_runtime_limit_violation():
     # Define a goal: service.health == healthy
     goal = Goal(id="goal-1", expression="service.health == healthy")
-    
+
     # Define a utility with infrastructure side effects
     utility = Utility(
         id="deployment.destroy",
@@ -80,10 +83,10 @@ def test_runtime_limit_violation():
         side_effects=SideEffectType.INFRASTRUCTURE,
         transport=UtilityTransport(type="openapi", method="POST", path="/destroy")
     )
-    
+
     # Limit denies infrastructure side effects
     limit = Limit(id="limit-1", action_pattern="deny infrastructure")
-    
+
     contract = Contract(
         id="contract-1",
         goals=[goal],

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GluLess</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="canvas">
+
+  <!-- HEADER -->
+  <header class="glu-header">
+    <div>
+      <div class="wordmark"><span class="wm-glu">GLU</span><span class="wm-less">less</span></div>
+      <div class="tagline">The contract is the program.</div>
+    </div>
+    <div class="header-actions">
+      <div class="status-pill" id="status-pill">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-label">Loading…</span>
+        <span class="mode-badge" id="mode-badge" hidden></span>
+      </div>
+      <button class="btn-ghost" id="btn-contract">Contract</button>
+      <button class="btn" id="btn-run">
+        <span id="run-icon">▶</span>
+        <span id="run-label">Run</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- CONTRACT DRAWER -->
+  <div class="card contract-drawer" id="contract-drawer" hidden>
+    <div class="drawer-header">
+      <span class="drawer-title">contract.yaml</span>
+      <button class="drawer-close" id="btn-close-contract">✕</button>
+    </div>
+    <pre class="contract-pre" id="contract-pre"></pre>
+  </div>
+
+  <!-- GOAL -->
+  <div class="card" id="card-goal">
+    <div class="card-section">
+      <div class="label">Goal</div>
+      <div class="goal-row">
+        <div>
+          <div class="goal-description" id="goal-description">List all services and verify they are reachable</div>
+          <div class="goal-predicate" id="goal-predicate">services.listed == true</div>
+        </div>
+        <div class="verdict" id="verdict">UNSATISFIED</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIMITS + UTILITIES -->
+  <div class="split">
+
+    <div class="card">
+      <div class="card-section">
+        <div class="label">Limits</div>
+        <div class="limits-list" id="limits-list">
+          <div class="limit-row deny">
+            <span class="limit-verb">deny</span>
+            <span class="limit-pattern">*</span>
+            <span class="limit-note">default</span>
+          </div>
+          <div class="limit-row allow">
+            <span class="limit-verb">allow</span>
+            <span class="limit-pattern">Monitoring.services.list</span>
+            <span class="limit-note">read · no side effects</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-section">
+        <div class="label">Utilities</div>
+        <div class="funnel" id="funnel">
+          <div class="funnel-row">
+            <span class="funnel-label">Registry</span>
+            <span class="funnel-count" id="f-registry"></span>
+          </div>
+          <div class="funnel-row">
+            <span class="funnel-label">Goal-compatible</span>
+            <span class="funnel-count" id="f-compatible"></span>
+          </div>
+          <div class="funnel-row selected">
+            <span class="funnel-label">Permitted</span>
+            <span class="funnel-count" id="f-permitted"></span>
+          </div>
+        </div>
+        <div class="util-cards" id="util-cards">
+          <div class="util-card" id="uc-default">
+            <div class="uc-id">Monitoring.services.list</div>
+            <div class="uc-tags">
+              <span class="tag read">read</span>
+              <span style="font-size:11px;color:var(--quiet)">no side effects</span>
+            </div>
+            <div class="uc-transport">GET /v0/services</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PIPELINE -->
+  <div class="card">
+    <div class="card-section">
+      <div class="label">Runtime</div>
+      <div class="pipeline">
+        <div class="p-stage" id="ps-resolve">
+          <div class="ps-count" id="psc-resolve"></div>
+          <div class="ps-name">Resolve</div>
+          <div class="ps-sub">registry</div>
+        </div>
+        <div class="p-stage" id="ps-filter">
+          <div class="ps-count" id="psc-filter"></div>
+          <div class="ps-name">Filter</div>
+          <div class="ps-sub">goal-match</div>
+        </div>
+        <div class="p-stage" id="ps-authorize">
+          <div class="ps-count" id="psc-authorize"></div>
+          <div class="ps-name">Authorize</div>
+          <div class="ps-sub">limits</div>
+        </div>
+        <div class="p-stage" id="ps-execute">
+          <div class="ps-count" id="psc-execute"></div>
+          <div class="ps-name">Execute</div>
+          <div class="ps-sub">invoke</div>
+        </div>
+        <div class="p-stage" id="ps-verify">
+          <div class="ps-count" id="psc-verify"></div>
+          <div class="ps-name">Verify</div>
+          <div class="ps-sub">evidence</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DECISION + EVIDENCE -->
+  <div class="split">
+
+    <div class="card">
+      <div class="card-section">
+        <div class="label">Decision</div>
+        <div id="decision-paths">
+          <div class="empty-note">Awaiting authorization…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-section">
+        <div class="label">Evidence</div>
+        <div id="evidence-entries">
+          <div class="empty-note">Awaiting verification…</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RESULT -->
+  <div class="card" id="card-result" hidden>
+    <div class="card-section result-block" id="result-block">
+      <div class="result-status" id="result-status">Goal satisfied</div>
+      <div class="result-predicate" id="result-predicate">services.listed == true</div>
+      <div class="result-verdict" id="result-verdict">PROVEN</div>
+    </div>
+  </div>
+
+  <!-- EVENTS -->
+  <div class="events-rail" id="events-rail">
+    <button class="events-toggle" id="events-toggle" aria-expanded="false">
+      <span class="toggle-caret" id="toggle-caret">▸</span>
+      Runtime events
+      <span class="ev-count" id="ev-count">0</span>
+    </button>
+    <div class="events-body" id="events-body" hidden>
+      <div class="events-log" id="events-log"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

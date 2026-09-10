@@ -1,6 +1,9 @@
+from typing import List, Optional
+
 import yaml
-from typing import Dict, List, Any, Optional
-from gluless.models import Contract, Goal, Limit, EvidenceRequirement, Utility
+
+from gluless.models import Contract, EvidenceRequirement, Goal, Limit, Utility
+
 
 class CompileError(Exception):
     pass
@@ -22,7 +25,7 @@ class GluLessCompiler:
         try:
             data = yaml.safe_load(yaml_content)
         except Exception as e:
-            raise CompileError(f"Failed to parse YAML content: {e}")
+            raise CompileError(f"Failed to parse YAML content: {e}") from e
 
         if not isinstance(data, dict):
             raise CompileError("Contract source must be a structured key-value mapping")
@@ -36,7 +39,7 @@ class GluLessCompiler:
         raw_goals = data.get("goals", [])
         if not isinstance(raw_goals, list):
             raise CompileError("'goals' must be a list of goal declarations")
-        
+
         for idx, g in enumerate(raw_goals):
             if not isinstance(g, dict):
                 raise CompileError(f"Goal at index {idx} must be a dictionary")
@@ -56,19 +59,19 @@ class GluLessCompiler:
         raw_limits = data.get("limits", [])
         if not isinstance(raw_limits, list):
             raise CompileError("'limits' must be a list of limit declarations")
-        
-        for idx, l in enumerate(raw_limits):
-            if not isinstance(l, dict):
+
+        for idx, lim in enumerate(raw_limits):
+            if not isinstance(lim, dict):
                 raise CompileError(f"Limit at index {idx} must be a dictionary")
-            limit_id = l.get("id")
-            pattern = l.get("action_pattern")
+            limit_id = lim.get("id")
+            pattern = lim.get("action_pattern")
             if not limit_id or not pattern:
                 raise CompileError(f"Limit at index {idx} is missing required fields ('id', 'action_pattern')")
             limits.append(Limit(
                 id=limit_id,
                 action_pattern=pattern,
-                description=l.get("description"),
-                version=str(l.get("version", "1.0.0"))
+                description=lim.get("description"),
+                version=str(lim.get("version", "1.0.0"))
             ))
 
         # Compile Evidence Requirements
@@ -76,7 +79,7 @@ class GluLessCompiler:
         raw_evidence = data.get("evidence_requirements", [])
         if not isinstance(raw_evidence, list):
             raise CompileError("'evidence_requirements' must be a list of evidence declarations")
-        
+
         for idx, ev in enumerate(raw_evidence):
             if not isinstance(ev, dict):
                 raise CompileError(f"EvidenceRequirement at index {idx} must be a dictionary")

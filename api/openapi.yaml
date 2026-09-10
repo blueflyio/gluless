@@ -1,92 +1,265 @@
 openapi: 3.0.3
+
 info:
-  title: GasCity API
-  description: The API endpoints for managing the GasCity agent platform and deployment rigs.
-  version: 0.1.0
-x-provider-name: GasCity
+  title: Monitoring API
+  description: >
+    Example Monitoring API — manages services and agent sessions.
+
+    This file demonstrates how GluLess projects an OpenAPI contract into
+    a runtime Utility registry via x-gluless-* extensions.
+
+    Model:
+
+      OpenAPI contract    (this file — authoritative API definition)
+          ↓  x-gluless-* extensions
+      OpenAPIImporter     (sdk/python/gluless/importers/openapi.py)
+          ↓  Utility objects
+      UtilityRegistry     (runtime index, per-process)
+          ↓  ContextResolver
+      GluLess runtime
+
+    This file does NOT act as an independent Utility Registry.
+  version: 0.2.0
+
+x-provider-name: Monitoring
+
 servers:
   - url: http://localhost:8000/v0
-    description: Local development server
+    description: Local development server (mock)
+
+security:
+  - ApiKeyAuth: []
+
 paths:
-  /cities:
+
+  /services:
     get:
-      summary: List all cities
-      description: Returns a list of all cities registered in the GasCity network.
-      operationId: listCities
+      operationId: listServices
+      summary: List all services
+      description: Returns all services registered in the network.
+      # GluLess binding metadata — consumed by OpenAPIImporter
+      x-gluless-name: Monitoring.services.list
+      x-gluless-type: read
+      x-gluless-side-effects: none
+      tags:
+        - services
       responses:
         '200':
-          description: A list of cities
+          description: Array of Service objects
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/City'
+                  $ref: '#/components/schemas/Service'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
-  /sessions/{id}/nudge:
+  /services/{name}:
     post:
-      summary: Nudge a session
-      description: Request a session nudge or restart by session ID.
-      operationId: nudgeSession
+      operationId: createService
+      summary: Register a service
+      description: >
+        Register a new service.
+        This is a state-mutating operation; it is denied by default under
+        the demo contract's "deny *" limit and requires explicit allow.
+      # GluLess binding metadata — consumed by OpenAPIImporter
+      x-gluless-name: Monitoring.service.create
+      x-gluless-type: mutation
+      x-gluless-side-effects: create
+      tags:
+        - services
       parameters:
-        - name: id
+        - name: name
           in: path
-          description: The unique identifier of the session.
+          description: Service slug (unique identifier).
           required: true
           schema:
             type: string
       requestBody:
-        description: Parameters for nudging the session.
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                force:
-                  type: boolean
-                  description: Force nudge even if the session has active tasks.
-                  default: false
+              $ref: '#/components/schemas/ServiceCreate'
       responses:
-        '200':
-          description: Successful nudge operation
+        '201':
+          description: Service registered
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: nudged
+                $ref: '#/components/schemas/Service'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          description: Service name already exists
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sessions/{id}/nudge:
+    post:
+      operationId: nudgeSession
+      summary: Nudge a session
+      description: >
+        Request a session nudge or restart. Produces an external message.
+        Denied by default under "deny *"; requires explicit allow limit.
+      # GluLess binding metadata — consumed by OpenAPIImporter
+      x-gluless-name: Monitoring.sessions.nudge
+      x-gluless-type: mutation
+      x-gluless-side-effects: external_message
+      tags:
+        - sessions
+      parameters:
+        - name: id
+          in: path
+          description: Session UUID.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NudgeRequest'
+      responses:
+        '200':
+          description: Nudge accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NudgeResult'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
           description: Session not found
+        '409':
+          description: Session has active tasks and force was not set
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      description: Returns operational status. Not a GluLess utility — excluded from registry.
+      x-gluless-exclude: true
+      tags:
+        - meta
+      security: []
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
 
 components:
+
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
       in: header
-      name: X-GasCity-Token
+      name: X-API-Token
+      description: >
+        API token. Injected by GluLess runtime from environment variable API_TOKEN.
 
   responses:
     UnauthorizedError:
-      description: API key is missing or invalid
+      description: API key missing or invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
-    City:
+
+    Service:
       type: object
       required:
         - name
-        - health
+        - status
       properties:
         name:
           type: string
-          example: blucity
-        health:
+          example: auth-service
+        status:
           type: string
           enum: [healthy, degraded, down]
           example: healthy
+        version:
+          type: string
+          example: v1.2.0
+        instances:
+          type: integer
+          example: 3
+
+    ServiceCreate:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, down]
+          default: healthy
+
+    NudgeRequest:
+      type: object
+      properties:
+        force:
+          type: boolean
+          default: false
+
+    NudgeResult:
+      type: object
+      required:
+        - status
+        - sessionId
+      properties:
+        status:
+          type: string
+          enum: [nudged, already-idle, forced]
+          example: nudged
+        sessionId:
+          type: string
+          format: uuid
+        message:
+          type: string
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - version
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+          example: ok
+        version:
+          type: string
+          example: 0.2.0
+        uptime:
+          type: integer
+          description: Server uptime in seconds.
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+        message:
+          type: string

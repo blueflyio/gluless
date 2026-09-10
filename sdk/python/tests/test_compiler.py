@@ -1,6 +1,8 @@
 import pytest
-from gluless.compiler import GluLessCompiler, CompileError
-from gluless.models import Utility, UtilityType, SideEffectType, UtilityTransport
+
+from gluless.compiler import CompileError, GluLessCompiler
+from gluless.models import SideEffectType, Utility, UtilityTransport, UtilityType
+
 
 @pytest.fixture
 def available_utils():
@@ -46,9 +48,9 @@ def test_compile_valid_contract(available_utils):
       - deployment.update
       - deployment.read
     """
-    
+
     contract = GluLessCompiler.compile_yaml(yaml_src, available_utilities=available_utils)
-    
+
     assert contract.id == "test-pipeline"
     assert len(contract.goals) == 2
     assert contract.goals[0].expression == "service.health == healthy"

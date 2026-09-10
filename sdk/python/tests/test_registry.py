@@ -1,8 +1,11 @@
 import os
 import tempfile
+
 import pytest
-from gluless.models import Utility, UtilityType, SideEffectType, UtilityTransport
+
+from gluless.models import SideEffectType, Utility, UtilityTransport, UtilityType
 from gluless.registry import UtilityRegistry
+
 
 @pytest.fixture
 def temp_registry_file():
@@ -14,7 +17,7 @@ def temp_registry_file():
 
 def test_registry_registration_and_preservation(temp_registry_file):
     registry = UtilityRegistry(registry_path=temp_registry_file)
-    
+
     # Define a mock utility
     transport = UtilityTransport(
         type="openapi",
@@ -43,11 +46,11 @@ def test_registry_registration_and_preservation(temp_registry_file):
     )
 
     assert registry_id == "utility://gascity/sessions.nudge"
-    
+
     # Reload registry from disk
     new_registry = UtilityRegistry(registry_path=temp_registry_file)
     assert registry_id in new_registry.utilities
-    
+
     ut_data = new_registry.utilities[registry_id]
     assert ut_data["source_uri"] == "file:///mock/openapi.yaml"
     assert ut_data["side_effect"]["declared"] == "update"
@@ -56,7 +59,7 @@ def test_registry_registration_and_preservation(temp_registry_file):
 
     # Test update_observation
     new_registry.update_observation(registry_id, "process_restart", 0.95)
-    
+
     refreshed_registry = UtilityRegistry(registry_path=temp_registry_file)
     assert refreshed_registry.utilities[registry_id]["side_effect"]["observed"] == "process_restart"
     assert refreshed_registry.utilities[registry_id]["side_effect"]["confidence"] == 0.95
@@ -64,7 +67,7 @@ def test_registry_registration_and_preservation(temp_registry_file):
 
 def test_registry_search_and_resolve(temp_registry_file):
     registry = UtilityRegistry(registry_path=temp_registry_file)
-    
+
     # Register a read utility
     read_transport = UtilityTransport(type="openapi", method="GET", path="/cities")
     read_utility = Utility(

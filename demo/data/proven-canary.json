@@ -1,0 +1,312 @@
+{
+  "meta": {
+    "capturedAt": "2026-09-05",
+    "contractId": "glu-demo-contract",
+    "result": "proven",
+    "source": "live canary run — glu-agent 0.2.0 / mock Monitoring API",
+    "note": "Real execution. localhost:8000 is the mock API that ran during capture."
+  },
+  "events": [
+    {
+      "type": "RUN_STARTED",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "offsetMs": 0
+    },
+    {
+      "type": "STATE_SNAPSHOT",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "snapshot": {
+        "contractId": "glu-demo-contract",
+        "phase": "compiling",
+        "goals": [
+          {
+            "id": "goal-list-services",
+            "expression": "services.listed == true",
+            "description": "List all services and verify they are reachable"
+          }
+        ],
+        "limits": [
+          {
+            "id": "limit-deny-all",
+            "pattern": "deny *",
+            "description": "Deny any action not explicitly permitted"
+          },
+          {
+            "id": "limit-allow-list",
+            "pattern": "allow Monitoring.services.list",
+            "description": "Permit listing services — read-only, no side effects"
+          }
+        ],
+        "utilities": [
+          {
+            "id": "Monitoring.services.list",
+            "type": "read",
+            "sideEffects": "none",
+            "transport": {
+              "method": "GET",
+              "path": "/services"
+            }
+          }
+        ],
+        "plan": [],
+        "observations": [],
+        "evidence": [],
+        "decision_paths": [],
+        "context_projection": {
+          "registry_total": 3,
+          "goal_compatible": 0,
+          "limit_permitted": 0
+        },
+        "error": null
+      },
+      "offsetMs": 1
+    },
+    {
+      "type": "TEXT_MESSAGE_START",
+      "messageId": "msg-replay-r",
+      "offsetMs": 51
+    },
+    {
+      "type": "TEXT_MESSAGE_CHUNK",
+      "messageId": "msg-replay-r",
+      "delta": "⚙️  Compiling contract `glu-demo-contract`…\n",
+      "offsetMs": 52
+    },
+    {
+      "type": "TEXT_MESSAGE_CHUNK",
+      "messageId": "msg-replay-r",
+      "delta": "✅ Registry: 3 utilities loaded from api/openapi.yaml\n",
+      "offsetMs": 52
+    },
+    {
+      "type": "STATE_DELTA",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/phase",
+          "value": "resolving"
+        }
+      ],
+      "offsetMs": 52
+    },
+    {
+      "type": "STATE_DELTA",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/context_projection/registry_total",
+          "value": 3
+        }
+      ],
+      "offsetMs": 152
+    },
+    {
+      "type": "STATE_DELTA",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/phase",
+          "value": "filtering"
+        }
+      ],
+      "offsetMs": 152
+    },
+    {
+      "type": "TEXT_MESSAGE_CHUNK",
+      "messageId": "msg-replay-r",
+      "delta": "🧠 FILTER: 1/3 utilities goal-compatible (domain: services)\n",
+      "offsetMs": 204
+    },
+    {
+      "type": "STATE_DELTA",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/context_projection/goal_compatible",
+          "value": 1
+        }
+      ],
+      "offsetMs": 204
+    },
+    {
+      "type": "STATE_DELTA",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/phase",
+          "value": "authorizing"
+        }
+      ],
+      "offsetMs": 204
+    },
+    {
+      "type": "TEXT_MESSAGE_CHUNK",
+      "messageId": "msg-replay-r",
+      "delta": "   ✅ AUTHORIZE Monitoring.services.list  (Allowed by limit 'limit-allow-list' (allow Monitoring.services.list))\n",
+      "offsetMs": 254
+    },
+    {
+      "type": "STATE_DELTA",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/decision_paths",
+          "value": [
+            {
+              "utilityId": "Monitoring.services.list",
+              "decision": "allow",
+              "reason": "Allowed by limit 'limit-allow-list' (allow Monitoring.services.list)",
+              "type": "read",
+              "sideEffects": "none"
+            }
+          ]
+        },
+        {
+          "op": "replace",
+          "path": "/context_projection/limit_permitted",
+          "value": 1
+        },
+        {
+          "op": "replace",
+          "path": "/plan",
+          "value": [
+            "Monitoring.services.list"
+          ]
+        }
+      ],
+      "offsetMs": 254
+    },
+    {
+      "type": "STATE_DELTA",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/phase",
+          "value": "executing"
+        }
+      ],
+      "offsetMs": 255
+    },
+    {
+      "type": "TEXT_MESSAGE_CHUNK",
+      "messageId": "msg-replay-r",
+      "delta": "▶️  EXECUTE Monitoring.services.list  →  GET http://localhost:8000/v0/services\n",
+      "offsetMs": 255
+    },
+    {
+      "type": "TEXT_MESSAGE_CHUNK",
+      "messageId": "msg-replay-r",
+      "delta": "   ✅ HTTP 200  (7ms)\n",
+      "offsetMs": 263
+    },
+    {
+      "type": "STATE_DELTA",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/observations",
+          "value": [
+            {
+              "utilityId": "Monitoring.services.list",
+              "method": "GET",
+              "path": "/services",
+              "httpStatus": 200,
+              "latencyMs": 7,
+              "success": true,
+              "error": null
+            }
+          ]
+        }
+      ],
+      "offsetMs": 263
+    },
+    {
+      "type": "STATE_DELTA",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/phase",
+          "value": "verifying"
+        }
+      ],
+      "offsetMs": 263
+    },
+    {
+      "type": "TEXT_MESSAGE_CHUNK",
+      "messageId": "msg-replay-r",
+      "delta": "   ✅ response.status == 200  PASS\n",
+      "offsetMs": 314
+    },
+    {
+      "type": "STATE_DELTA",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/evidence",
+          "value": [
+            {
+              "requirementId": "ev-http-ok",
+              "assertion": "response.status == 200",
+              "passed": true,
+              "httpStatus": 200,
+              "detail": "HTTP 200"
+            }
+          ]
+        }
+      ],
+      "offsetMs": 314
+    },
+    {
+      "type": "TEXT_MESSAGE_CHUNK",
+      "messageId": "msg-replay-r",
+      "delta": "\n✅ Phase: proven  │  Goal satisfied  │  Evidence: 1\n",
+      "offsetMs": 314
+    },
+    {
+      "type": "TEXT_MESSAGE_END",
+      "messageId": "msg-replay-r",
+      "offsetMs": 314
+    },
+    {
+      "type": "STATE_DELTA",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/phase",
+          "value": "proven"
+        }
+      ],
+      "offsetMs": 314
+    },
+    {
+      "type": "RUN_FINISHED",
+      "threadId": "replay-canary-001",
+      "runId": "replay-run-001",
+      "offsetMs": 315
+    }
+  ]
+}

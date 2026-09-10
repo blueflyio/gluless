@@ -30,10 +30,6 @@ GluLess is an agent-native executable contract language and runtime designed to 
 * Cedar Policy Language (deterministic authorization)
 * Open Policy Agent (Rego policy validation)
 
-## Bluefly Dependencies
-
-* Consumed by the Bluefly Agent Platform and rigs to govern autonomous tasks.
-
 ## Downstream Consumers
 
 * Agent runtimes, rigs, and orchestration layers requiring structured outcome contracts and deterministic limit enforcement.

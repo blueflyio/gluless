@@ -1,10 +1,13 @@
 import os
 import tempfile
+
 import pytest
-from gluless.models import Utility, UtilityType, SideEffectType, UtilityTransport, Contract, Goal, Limit
-from gluless.registry import UtilityRegistry
-from gluless.experience import ExperienceIndex
+
 from gluless.context import ContextResolver
+from gluless.experience import ExperienceIndex
+from gluless.models import Contract, Goal, Limit, SideEffectType, Utility, UtilityTransport, UtilityType
+from gluless.registry import UtilityRegistry
+
 
 @pytest.fixture
 def temp_files():
@@ -22,7 +25,7 @@ def test_resolver_limits_enforcement(temp_files):
     reg_path, exp_path = temp_files
     registry = UtilityRegistry(registry_path=reg_path)
     exp_index = ExperienceIndex(index_path=exp_path)
-    
+
     # 1. Register a mutation utility
     t = UtilityTransport(type="openapi", method="POST", path="/destroy")
     utility = Utility(
@@ -90,7 +93,7 @@ def test_resolver_experience_ranking(temp_files):
     # A has 100% success rate, 50ms latency
     exp_index.record_invocation(utility_a.id, success=True, latency=0.05)
     exp_index.record_invocation(utility_a.id, success=True, latency=0.05)
-    
+
     # B has 50% success rate, 500ms latency
     exp_index.record_invocation(utility_b.id, success=True, latency=0.5)
     exp_index.record_invocation(utility_b.id, success=False, latency=0.5)
@@ -107,7 +110,7 @@ def test_resolver_experience_ranking(temp_files):
 
     # Both utilities should be allowed
     assert len(projection.utilities) == 2
-    
+
     # Utility A must be ranked first due to higher success rate / lower latency
     assert projection.utilities[0].id == "GasCity.action.a"
     assert projection.utilities[1].id == "GasCity.action.b"
@@ -141,6 +144,6 @@ def test_resolver_projection_discardability(temp_files):
 
     # Mutate the projection projection
     projection.utilities.clear()
-    
+
     # Assert master registry is not mutated/changed
     assert len(registry.utilities) == 1
