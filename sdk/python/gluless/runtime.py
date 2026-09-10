@@ -101,7 +101,11 @@ class GluLessRuntime:
                         curr = curr[part]
                     else:
                         return False
-                equal = str(curr) == val
+                low = val.lower()
+                if low in ("true", "false"):
+                    equal = bool(curr) if low == "true" else not bool(curr)
+                else:
+                    equal = str(curr) == val
                 return equal if op == "==" else not equal
         return False
 

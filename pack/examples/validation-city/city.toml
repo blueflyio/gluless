@@ -1,0 +1,8 @@
+# Fixture city for local formula discovery / gc formula show of gluless-prove.
+# Not a production city. No [[gluless]] keys. No Gas City fork.
+
+[beads]
+provider = "bd"
+
+[daemon]
+formula_v2 = true

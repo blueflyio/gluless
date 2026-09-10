@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Gas City Formula v2 check.exec entrypoint for gluless-prove.
+# Reads GLULESS_CONTRACT / GLULESS_OPENAPI / GLULESS_BASE_URL from the
+# environment only. Does not interpolate bead titles or formula vars into sh -c.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PACK_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${PACK_ROOT}/.." && pwd)"
+
+CONTRACT="${GLULESS_CONTRACT:-${PACK_ROOT}/contracts/services-healthy.glu}"
+OPENAPI="${GLULESS_OPENAPI:-${REPO_ROOT}/api/openapi.yaml}"
+
+export PYTHONPATH="${REPO_ROOT}/sdk/python${PYTHONPATH:+:${PYTHONPATH}}"
+
+if [[ -x "${REPO_ROOT}/.venv/bin/python" ]]; then
+  PYTHON="${REPO_ROOT}/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON="$(command -v python3)"
+else
+  PYTHON="$(command -v python)"
+fi
+
+if [[ -n "${GLULESS_BASE_URL:-}" ]]; then
+  exec "${PYTHON}" -m gluless prove --contract "${CONTRACT}" --openapi "${OPENAPI}" --base-url "${GLULESS_BASE_URL}"
+fi
+
+exec "${PYTHON}" -m gluless prove --contract "${CONTRACT}" --openapi "${OPENAPI}" --mock

@@ -1,0 +1,8 @@
+[pack]
+name = "gluless-validation-city"
+schema = 2
+version = "0.0.0"
+description = "Fixture city: local import of the gluless pack for formula show / check smoke"
+
+[imports.gluless]
+source = "../.."

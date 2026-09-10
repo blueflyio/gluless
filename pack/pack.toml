@@ -1,0 +1,9 @@
+# GluLess Gas City pack — Goal · Limits · Utilities proof via Formula v2 check.exec
+# Import into a city. Do not add [[gluless]] to city.toml. Formula stays TOML HOW;
+# GluLess is the executable acceptance contract the check invokes.
+
+[pack]
+name = "gluless"
+schema = 2
+version = "0.1.0"
+description = "GluLess Goal · Limits · Utilities — Formula v2 check.exec proves Goals under Limits"
