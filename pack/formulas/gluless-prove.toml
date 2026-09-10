@@ -1,0 +1,43 @@
+formula = "gluless-prove"
+description = "Prove a GluLess Goal under Limits via typed Utilities. Check exec runs the GluLess CLI; workflow-finalize stays Gas City orchestrator-owned."
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[vars.contract]
+description = "Filesystem path to a .glu contract. Operators export GLULESS_CONTRACT — never interpolate into sh -c."
+default = ""
+
+[vars.openapi]
+description = "Filesystem path to OpenAPI YAML. Operators export GLULESS_OPENAPI — never interpolate into sh -c."
+default = ""
+
+[vars.base_url]
+description = "API base URL including version prefix (e.g. http://127.0.0.1:8000/v0). Operators export GLULESS_BASE_URL; empty means CLI mock."
+default = ""
+
+[[steps]]
+id = "prepare-proof"
+title = "Prepare GluLess proof inputs"
+description = """
+Prepare the environment for the orchestrator-owned GluLess check.
+
+Trust boundary (docs.gascity.com trust-boundaries): bead titles and formula
+vars are untrusted. Pass contract / OpenAPI / base URL only via process
+environment variables or CLI argv — never via sh -c string interpolation.
+
+Export (examples use pack defaults when unset):
+  GLULESS_CONTRACT  path to .glu (default: pack contracts/services-healthy.glu)
+  GLULESS_OPENAPI   path to OpenAPI YAML (default: repo api/openapi.yaml)
+  GLULESS_BASE_URL  optional API base; unset => ephemeral all-healthy mock
+
+Then close this step so [steps.check] can run `scripts/gluless-check`.
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = "scripts/gluless-check"
+timeout = "2m"

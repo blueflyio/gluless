@@ -1,0 +1,16 @@
+goal ServicesHealthy {
+    target:
+        services.healthy == true
+
+    limits:
+        deny *
+        allow Monitoring.services.list
+
+    utilities:
+        Monitoring.services.list
+
+    evidence:
+        response.status == 200
+        response.schema valid
+        services observed
+}
