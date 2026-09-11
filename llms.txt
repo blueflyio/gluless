@@ -1,28 +1,23 @@
 # GluLess
 
-> An agent-native executable contract language and runtime built around Goal, Limits, and Utilities.
-
-GluLess lets humans and agents declare a Goal, Limits, and Utilities. The runtime resolves, filters, authorizes, executes, and verifies — without glue code.
+> Executable acceptance contracts: Goal · Limits · Utilities. Proven done — not glue.
 
 ## Core
 
-- [README](README.md): purpose, model, pipeline, and current status
-- [OWNERSHIP](OWNERSHIP.md): what GluLess owns, upstream authorities, extension boundary
-- [AGENTS](AGENTS.md): agent operating contract, decision rules, repo layout
+- [README](README.md): concept, how it works, status, non-goals
+- [PLAN](docs/PLAN.md): phased done / next / blockers / acceptance
+- [OWNERSHIP](OWNERSHIP.md): owns / does not own / extension boundary
+- [AGENTS](AGENTS.md): agent operating contract
 
-## Specification
+## Reference
 
-- [gluless-specification](docs/gluless-specification.md): language primitives, type system, computational model, invariants
-- [VISION](docs/VISION.md): design principles, API-first rules, testing mandate
+- [gluless-specification](docs/gluless-specification.md): language / IR (not the product thesis)
+- [connections-and-plugins](docs/connections-and-plugins.md): OpenAPI importer, registry, bindings
 
-## Architecture
+## Pack
 
-- [connections-and-plugins](docs/connections-and-plugins.md): importers, registry modes, transport bindings, all API endpoints, how to add a new provider
+- [pack/README](pack/README.md): Gas City import + Formula `gluless-prove`
 
-## Agent
+## Agent demo
 
-- [AGENT](`.agents/agents/glu-agent/AGENT.md`): wire spec for the reference GLU agent — endpoints, AG-UI events, state shape, contract format
-
-## Research
-
-- [whitepaper](docs/whitepapers/gluless_whitepaper_draft.md): adjacent standards, semantic model, canonical IR
+- [AGENT](.agents/agents/glu-agent/AGENT.md): reference AG-UI agent wire spec
