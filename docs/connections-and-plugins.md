@@ -2,6 +2,8 @@
 
 **The contract is the program. A connection is how the runtime reaches the world.**
 
+Product thesis: [README.md](../README.md). Plan: [PLAN.md](PLAN.md).
+
 ---
 
 ## Conceptual model
@@ -31,7 +33,7 @@ Importers project external API specifications into `Utility` objects in the runt
 
 ### Currently implemented: OpenAPI
 
-[`sdk/python/gluless/importers/openapi.py`](file:///Users/flux423/Sites/blueflyio/POCs/Gluless/sdk/python/gluless/importers/openapi.py)
+[`sdk/python/gluless/importers/openapi.py`](../sdk/python/gluless/importers/openapi.py)
 
 The `OpenAPIImporter` reads an OpenAPI 3.x YAML/JSON spec and produces a list of `Utility` IR objects. Each operation becomes a utility when annotated with `x-gluless-*` extensions:
 
@@ -52,10 +54,10 @@ Operations **without** `x-gluless-name` are imported with a derived ID but are f
 
 | Importer | Spec format | Status |
 |----------|------------|--------|
-| `OpenAPIImporter` | OpenAPI 3.x YAML/JSON | ✅ implemented |
-| `MCPImporter` | MCP tool manifest JSON | 🔲 planned |
-| `GraphQLImporter` | GraphQL schema SDL | 🔲 planned |
-| `GRPCImporter` | Protobuf / gRPC reflection | 🔲 planned |
+| `OpenAPIImporter` | OpenAPI 3.x YAML/JSON | implemented |
+| `MCPImporter` | MCP tool manifest JSON | planned |
+| `GraphQLImporter` | GraphQL schema SDL | planned |
+| `GRPCImporter` | Protobuf / gRPC reflection | planned |
 
 **To add a new importer**, implement the interface:
 
@@ -71,7 +73,7 @@ Then call it in `_build_registry()` in `agent.py` before `registry.register()`.
 
 ## Utility Registry
 
-[`sdk/python/gluless/registry.py`](file:///Users/flux423/Sites/blueflyio/POCs/Gluless/sdk/python/gluless/registry.py)
+[`sdk/python/gluless/registry.py`](../sdk/python/gluless/registry.py)
 
 The registry is the runtime knowledge plane. It stores:
 
@@ -104,7 +106,7 @@ env: API_URL=http://localhost:8000/v0    (default)
 env: API_TOKEN=...                       (optional bearer/key auth)
 ```
 
-These are consumed by [`UtilityResolver`](file:///Users/flux423/Sites/blueflyio/POCs/Gluless/sdk/python/gluless/bindings.py) at execution time.
+These are consumed by [`UtilityResolver`](../sdk/python/gluless/bindings.py) at execution time.
 
 ### API endpoints for connection introspection
 
@@ -158,7 +160,7 @@ All endpoints are on the GLU Agent (port 8080):
 
 ## Transport bindings
 
-[`sdk/python/gluless/bindings.py`](file:///Users/flux423/Sites/blueflyio/POCs/Gluless/sdk/python/gluless/bindings.py)
+[`sdk/python/gluless/bindings.py`](../sdk/python/gluless/bindings.py)
 
 `UtilityResolver` takes a `Utility` IR object and produces an `ExecutableBinding`. The binding holds everything needed to make a real HTTP call:
 

@@ -1,26 +1,42 @@
 # GluLess
 
-**An agent-native executable contract language and runtime.**
-
 **GLU = Goal · Limits · Utilities**
 
-> **The contract is the program.**
+> The contract is the program. Proven done — not glue.
 
-GluLess lets humans and agents declare an outcome (**Goal**), the authority that governs it (**Limits**), and the capabilities available to reach it (**Utilities**). The runtime resolves, authorizes, executes, and verifies — without hand-written integration glue.
+## Concept
 
-GluLess is **not** a Gas City Formula, not a seventh primitive, and not a city config key. The product story is **proven done**: a Goal is satisfied under Limits via typed Utilities, with evidence.
+A **`.glu` file** is an executable acceptance contract: it names an outcome (**Goal**), the authority that may be used (**Limits**), the capabilities that may satisfy it (**Utilities**), and what counts as proof (**evidence**).
+
+**GluLess** is the language + runtime that parses that contract, authorizes Utilities under Limits, executes them, and evaluates evidence. It exists to stop agent work from decaying into glue scripts, prompt-only “done,” and unverified side effects.
+
+It is **not** a Gas City Formula, not a seventh primitive, and not a `city.toml` key. Gas City already owns Agent / Bead / Formula / Rig / Pack / Event ([docs.gascity.com](https://docs.gascity.com/)). GluLess attaches as:
 
 | Layer | Role |
 |-------|------|
-| **GluLess** | Executable acceptance contract (`.glu` / IR) |
+| **`.glu` + CLI** | Acceptance contract + `gluless prove` |
 | **Pack** (`pack/`) | CONFIGURES — import into a city |
-| **Formula** (`gluless-prove`) | HOW — Formula v2 `[steps.check]` invokes the GluLess CLI |
+| **Formula** (`gluless-prove`) | HOW — Formula v2 `[steps.check]` runs the CLI |
 
-Further reading: [llms.txt](llms.txt), [OWNERSHIP.md](OWNERSHIP.md), [docs/gluless-specification.md](docs/gluless-specification.md).
+**Proven Done** means the CLI (or pack check) reports `PROVEN=YES`: parse → authorize → execute → goal evaluation all pass against a real or mock Utility surface, with observable evidence — not a chat claim.
+
+```text
+.glu (Goal + Limits + Utilities + evidence)
+        │
+        ▼
+  gluless prove  ──►  RESOLVE → AUTHORIZE → EXECUTE → VERIFY
+        │
+        ▼
+   PROVEN=YES | blocked | waiting_for_approval | failed
+```
+
+Language / IR detail: [docs/gluless-specification.md](docs/gluless-specification.md).  
+Status and phases: [docs/PLAN.md](docs/PLAN.md).  
+Ownership boundary: [OWNERSHIP.md](OWNERSHIP.md).
 
 ---
 
-## GLU
+## How it works
 
 ### Goal
 
@@ -32,17 +48,17 @@ What governs execution. Capability availability does not imply permission.
 
 Evaluation is **declaration order, last match wins**. Selectors are exact (no substring matching): `*`, `Work.*`, a full utility id, a bare final segment, a side-effect class, or a utility type.
 
-`require approval for <selector>` stops the run with status `waiting_for_approval`. **Resume after approval is not implemented yet.**
+`require approval for <selector>` stops with `waiting_for_approval`. **Resume after approval is not implemented yet.**
 
-Utilities with side effect `unknown` (for example an RPC-style POST without `x-gluless-side-effects`) are denied unless a Limit names them. Unknown never inherits the authority of `create`.
+Utilities with side effect `unknown` are denied unless a Limit names them.
 
 ### Utilities
 
-Stable capabilities (OpenAPI operations today; MCP tools and A2A agents planned). Contracts name utility ids; the runtime binds transport.
+Stable capability ids (OpenAPI operations today; MCP / A2A planned). Contracts name ids; the runtime binds transport.
 
-### Example (repo contract)
+### Example
 
-From [`pack/contracts/services-healthy.glu`](pack/contracts/services-healthy.glu):
+[`pack/contracts/services-healthy.glu`](pack/contracts/services-healthy.glu):
 
 ```glu
 goal ServicesHealthy {
@@ -63,45 +79,20 @@ goal ServicesHealthy {
 }
 ```
 
-Standalone Limits block (supported by the parser):
-
-```glu
-limits {
-    deny *
-    allow Work.tasks.read
-    allow Work.tasks.claim
-    require approval for Deployment.promote
-    deny Infrastructure.destroy
-}
-```
-
----
-
-## Architecture
+### Runtime pipeline
 
 ```text
-Intent
-  → Goal + Limits + Utilities  (.glu or structured IR)
-  → Typed models.py IR
-  → Runtime
-       RESOLVE   OpenAPI → UtilityRegistry / bind declared ids
-       FILTER    Goal-relevant candidates (capability domain)
-       AUTHORIZE Limits (declaration order, last match wins)
-       EXECUTE   Invoke permitted Utilities (MVP: HTTP/OpenAPI only)
-       VERIFY    Evidence + goal predicate → Result
+Intent → .glu / IR → Runtime
+  RESOLVE   OpenAPI → UtilityRegistry / bind declared ids
+  FILTER    Goal-relevant candidates
+  AUTHORIZE Limits (last match wins)
+  EXECUTE   Permitted Utilities (MVP: HTTP/OpenAPI only)
+  VERIFY    Evidence + goal predicate → Result
 ```
 
-**Shipped MVP EXECUTE** is HTTP via the OpenAPI importer and `UtilityResolver`. MCP and A2A adapters are not shipped.
+Shipped EXECUTE is HTTP via the OpenAPI importer. MCP and A2A adapters are not shipped.
 
-Runtime `Result.status` values:
-
-```text
-satisfied | blocked | waiting_for_approval | failed
-```
-
-The CLI prove path prints stage lines such as `PARSE=PASS`, `AUTHORIZE=PASS`, `HTTP_EXECUTION=PASS`, `GOAL_EVALUATION=PASS`, and `PROVEN=YES` when the Goal is satisfied under Limits against a live or mock API.
-
-OpenAPI is the first Utility adapter. Per-operation `x-gluless-name` / `x-gluless-type` / `x-gluless-side-effects` declare GluLess identity on the API contract; the importer projects them into the registry.
+Result statuses: `satisfied | blocked | waiting_for_approval | failed`.
 
 ---
 
@@ -109,20 +100,28 @@ OpenAPI is the first Utility adapter. Per-operation `x-gluless-name` / `x-glules
 
 | Capability | State |
 |------------|--------|
-| `.glu` parser (`sdk/python/gluless/parser.py`) | **Shipped** — syntax → `models.py` IR; no semantic validation |
-| OpenAPI Utility importer | **Shipped** |
-| Limits evaluator (last match wins) | **Shipped** |
-| HTTP executor + evidence digests (SHA-256) | **Shipped** |
-| CLI `gluless prove` + pack `scripts/gluless-check` | **Shipped** |
-| MVP vertical slice (mock + tests) | **Works** |
+| `.glu` parser → `models.py` IR | **Done** (syntax only; no semantic validator) |
+| OpenAPI Utility importer | **Done** |
+| Limits evaluator (last match wins) | **Done** |
+| HTTP executor + SHA-256 evidence digests | **Done** |
+| CLI `gluless prove` + pack `scripts/gluless-check` | **Done** |
+| Pack + Formula `gluless-prove` | **Done** |
+| Vertical: `ServicesHealthy` (mock + pytest) | **Done** (Phase 2) |
+| GitLab Goal / OpenAPI utility projection | **Blocked** (Phase 3) |
 
-Proven under test: OpenAPI → typed Utilities; Goals/Limits govern execution; runs are observable (limits, utilities, evidence).
+Honest gaps: MCP/A2A adapters, approval resume, real JSON Schema validation for `response.schema valid`, published IR schema beyond Python dataclasses, planner beyond first READ/MUTATION.
+
+---
+
+## Plan
+
+See **[docs/PLAN.md](docs/PLAN.md)** for phases, acceptance criteria, and blockers.
+
+Next operator-visible slice: Phase 3 — a GitLab-shaped Goal under Limits — blocked until a GitLab OpenAPI (or equivalent) Utility surface exists to import. Do not invent glue to fake it.
 
 ---
 
 ## How to run
-
-From the repository root (after a checkout of this tree):
 
 ```bash
 cd sdk/python && python3 -m pip install -e '.[dev]'
@@ -134,17 +133,15 @@ python3 -m gluless prove \
   --mock
 
 ./pack/scripts/gluless-check
-
 cd sdk/python && python3 -m pytest
 ```
 
-- Entry point: `gluless` → `gluless.cli:main` (also `python3 -m gluless`).
-- Only CLI subcommand today: **`prove`**. There is no separate `parse` command.
-- Parse programmatically: `from gluless import parse, parse_file`.
-- `--mock` (or empty `--base-url`) starts an **ephemeral** all-healthy Monitoring mock for the prove path.
-- Optional live API: set `GLULESS_BASE_URL` / `--base-url` (include the version prefix your OpenAPI expects).
+- Only CLI subcommand today: **`prove`**.
+- Parse in code: `from gluless import parse, parse_file`.
+- `--mock` / empty `--base-url` → ephemeral all-healthy Monitoring mock.
+- Live API: `GLULESS_BASE_URL` / `--base-url`.
 
-Env vars used by the pack check script (argv/env only — never interpolate untrusted formula vars into `sh -c`):
+Pack check env (argv/env only — never interpolate untrusted formula vars into `sh -c`):
 
 ```text
 GLULESS_CONTRACT   path to .glu   (default: pack/contracts/services-healthy.glu)
@@ -154,39 +151,31 @@ GLULESS_BASE_URL   optional API base; unset → ephemeral mock
 
 ---
 
-## Gas City pack integration
-
-Importable pack under [`pack/`](pack/):
+## Gas City pack
 
 ```text
 pack/
-  pack.toml                 Pack identity (schema 2)
-  formulas/gluless-prove.toml   Formula v2 HOW + [steps.check] exec
-  contracts/*.glu           Goals (not Formula identity)
-  scripts/gluless-check     check.exec entrypoint
-  examples/validation-city  Local formula-show fixture
+  pack.toml
+  formulas/gluless-prove.toml   Formula v2 + [steps.check] exec
+  contracts/*.glu
+  scripts/gluless-check
+  examples/validation-city
 ```
 
-- Import the pack into a city. **Do not** add `[[gluless]]` to `city.toml`.
+- Import the pack. **Do not** add `[[gluless]]` to `city.toml`.
 - **Do not** fork Gas City or invent a seventh primitive.
-- Formula `gluless-prove` prepares inputs, then `[steps.check]` runs `scripts/gluless-check` (`mode = "exec"`), which calls `python -m gluless prove …`.
-- Pack **CONFIGURES**; Formula **invokes** GluLess at check time. GluLess remains the acceptance contract, not the Formula language.
+- Pack CONFIGURES; Formula invokes GluLess at check time.
 
-Operator details: [`pack/README.md`](pack/README.md).
+Operator notes: [`pack/README.md`](pack/README.md).
 
 ---
 
-## Backlog
+## Non-goals
 
-Honest gaps (not shipped):
-
-- MCP and A2A Utility adapters
-- Approval **resume** after `waiting_for_approval`
-- Real response **JSON Schema** validation (CLI currently uses a coarse evidence heuristic for `response.schema valid`)
-- Canonical published IR schema (beyond Python dataclasses)
-- Planner beyond “first READ / first MUTATION utility”
-
-See also [docs/connections-and-plugins.md](docs/connections-and-plugins.md) for importer status.
+- Not a Formula language and not a replacement for Gas City orchestration
+- Not Cedar / ContractPlane / OPA (Limits bind; they do not replace policy engines)
+- Not a general workflow engine, secrets store, or UI framework
+- Not “more glue to make agents look done”
 
 ---
 

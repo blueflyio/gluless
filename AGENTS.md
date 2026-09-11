@@ -2,160 +2,33 @@
 
 ## Project
 
-**GluLess** is an agent-native executable contract language and runtime.
+**GluLess** — executable acceptance contracts: **Goal · Limits · Utilities**.
 
-**GLU = Goal · Limits · Utilities**
+Human entry: [README.md](README.md). Plan: [docs/PLAN.md](docs/PLAN.md). Index: [llms.txt](llms.txt).
 
-> **The contract is the program. No glue required.**
+Proven Done = `gluless prove` / pack check reaches `PROVEN=YES` with evidence. Chat is not proof.
 
-GluLess lets humans and agents declare:
-- the **Goal** — what must become true
-- the **Limits** — what authority, constraints, policy, and invariants govern execution
-- the **Utilities** — what APIs, tools, agents, and services are available
+## Layout
 
-The runtime determines the execution path. The model does not self-authorize.
-
----
-
-## Repository layout
-
-```
-sdk/python/gluless/       Core SDK: models, compiler, registry, limits, context,
-                          bindings, evidence, experience, importers/
-sdk/python/tests/         Test suite (pytest)
-api/openapi.yaml          Example API spec — annotated with x-gluless-* extensions
-mock/mock_server.py       Mock API server (port 8000) for local canary runs
-.agents/agents/glu-agent/ Reference AG-UI agent implementation (port 8080)
-demo/                     Browser demo UI (no build step)
-docs/                     Architecture docs and specification
+```text
+sdk/python/gluless/   Runtime + parser + OpenAPI importer
+sdk/python/tests/     pytest
+api/openapi.yaml      Example OpenAPI (x-gluless-* annotations)
+pack/                 Gas City pack + Formula gluless-prove
+docs/PLAN.md          Phased status (only plan doc)
+docs/gluless-specification.md   Language / IR reference
 ```
 
----
+## Rules
 
-## Engineering directive
-
-Build the MVP using the GluLess principle:
-
-**GLU = Goal · Limits · Utilities**
-
-The objective is not to generate more code. It is to reduce glue between intent and execution.
-
-### Decision order
-
-```
-DELETE → CONFIGURE → COMPOSE → REUSE → EXTEND → CREATE
-```
-
-Before creating anything new, answer:
-
-```
-DOES_API_EXIST=
-DOES_PROTOCOL_EXIST=
-DOES_LIBRARY_EXIST=
-CAN_EXISTING_OWNER_BE_EXTENDED=
-```
-
-If yes, use it. If incomplete, extend it. Only create when a real gap is proven.
-
-### Limits (what agents must not do)
-
-- Do not duplicate schemas, API clients, models, or utility metadata
-- Do not add a new abstraction unless it removes real duplication or establishes a stable boundary
-- Do not accept "should work" as completion — prove behavior with tests and runtime evidence
-- Do not build around existing APIs — use them; if incomplete, extend them
-
-### Utilities (prefer stable capabilities over implementation-specific behavior)
-
-Prefer:
-```
-Monitoring.services.list
-Work.tasks.claim
-Deployment.status
-Memory.search
-GitLab.mergeRequest.create
-```
-
-Over:
-```
-run shell command
-read internal file
-query database directly
-call undocumented port
-```
-
----
-
-## Engineering model
-
-Think in this order:
-
-```
-GOAL      — What must become true?
-LIMITS    — What rules, authority, and constraints apply?
-UTILITIES — What existing capabilities can achieve it?
-EXECUTION — What is the smallest valid path?
-EVIDENCE  — What proves it worked?
-```
-
-Do not begin with "What code should I write?"  
-Begin with "What capability already exists that moves the Goal forward?"
-
----
-
-## Agent working rules
-
-When modifying this repository:
-
-1. Read current source before proposing architecture
-2. Identify the existing owner of the behavior
-3. Reuse before creating
-4. Write/update tests first for semantic changes (TDD)
-5. Make the smallest valid implementation change
-6. Run relevant tests (`pytest sdk/python/tests/`)
-7. Run the full suite before marking complete
-8. Update docs when semantics change
-9. Report evidence, not confidence
-
----
-
-## Evidence reporting (hard rule)
-
-Completion requires proof. For each task report:
-
-### Capability
-```
-GOAL=
-UTILITY=
-LIMITS_CHECKED=
-REQUEST=
-REAL_RESPONSE=
-TEST=
-RESULT=
-EVIDENCE=
-```
-
-### Mutations
-```
-AUTHORITY=
-SIDE_EFFECT=
-STATE_BEFORE=
-STATE_AFTER=
-EVIDENCE=
-```
-
-A compile is not proof. A rendered screen is not proof. An agent saying "done" is not proof.
-
----
+1. Read source before proposing architecture.
+2. Prefer DELETE → CONFIGURE → COMPOSE → REUSE → EXTEND → CREATE.
+3. Prefer named Utilities (`Monitoring.services.list`) over shell/filesystem glue.
+4. Semantic changes: failing test first, then smallest fix, then suite green.
+5. Update README / PLAN when ship status or blockers change.
+6. Report evidence (`GOAL=`, `UTILITY=`, `LIMITS_CHECKED=`, `RESULT=`, `EVIDENCE=`), not confidence.
+7. Do not fork Gas City; do not add `[[gluless]]` to `city.toml`; GluLess is not a Formula.
 
 ## Decision rule
 
-When uncertain, favor the option that creates:
-- fewer concepts
-- fewer dependencies
-- fewer hidden behaviors
-- stronger interfaces
-- better tests
-- clearer authority
-- more observable execution
-
-GluLess should remove glue, not become another layer of it.
+Favor fewer concepts, fewer dependencies, stronger interfaces, clearer authority, observable execution. GluLess should remove glue, not become another layer of it.
