@@ -67,7 +67,51 @@ CLI prove path prints stage lines (`PARSE=PASS`, …, `PROVEN=YES`).
 
 ## IR
 
-Canonical in-repo IR is the Python dataclasses in `sdk/python/gluless/models.py`. A separate published schema document is not shipped yet ([PLAN.md](PLAN.md)).
+The IR has exactly one hand-authored definition: the Pydantic v2 models in
+`sdk/python/gluless/models.py`. `api/contract.schema.json` (JSON Schema
+2020-12) is **generated** from those models and checked in so that consumers
+without Python — the Go and TypeScript SDKs — read a language-neutral contract
+rather than reimplementing one.
+
+```text
+sdk/python/gluless/models.py   authored      ← change the IR here
+        │  python -m gluless.schema --write
+        ▼
+api/contract.schema.json       generated     ← never hand-edit
+```
+
+`tests/test_ir_schema.py` fails if the checked-in file stops matching the
+models, so the two cannot drift. `python -m gluless.schema --check` is the same
+gate for CI.
+
+Shape: `Contract{ id, ir_version, goals[], limits[], utilities[],
+evidence_requirements[] }`, where a `Utility` carries `id`, `namespace`,
+`name`, declared `type` and `side_effects`, a `transport`, `auth`, and
+`provenance`. Every node sets `additionalProperties: false`: an undeclared key
+in a serialized IR document is an error, because the IR carries authority
+decisions and must fail closed the way the Limit evaluator does.
+
+`provenance` records where a Utility came from and is **never** consulted for
+authority.
+
+Why Pydantic: `ag-ui-protocol` already requires it, so it adds no dependency;
+it both validates instances and emits JSON Schema, so one definition serves the
+runtime and the published contract.
+
+### Identity of an imported Utility
+
+`id` is `<namespace>.<resource>.<action>`; it is what a Limit selector targets,
+so duplicates are a fail-closed import error. Parameter segments are normally
+erased (`/city/{name}` and `/city/{id}` name the same capability). Where that
+erasure is ambiguous — `/agent/{base}` and `/agent/{dir}/{base}` both reduced
+to `agent.read` — the tie-break is a property of the path alone:
+
+> a parameter segment that is **not** immediately preceded by a literal segment
+> contributes its name to the action.
+
+So `/agent/{dir}/{base}` is `agent.read.base`, while every path whose
+parameters each follow a literal segment is unchanged. `x-gluless-name`
+overrides identity outright.
 
 ## Non-negotiables (short)
 
