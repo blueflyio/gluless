@@ -118,3 +118,46 @@ def test_repo_example_spec_imports_cleanly():
     assert nudge.side_effects == SideEffectType.EXTERNAL_MESSAGE
     assert nudge.auth == [{"ApiKeyAuth": []}]
     assert nudge.transport.servers == ["http://localhost:8000/v0"]
+
+
+def test_consecutive_path_parameters_disambiguate_identity():
+    """Regression: `/agent/{base}` and `/agent/{dir}/{base}` both reduced to
+    `<Ns>.agent.read`, because every parameter segment was erased. The tie-break
+    names only the parameters that do not follow a literal segment, so it is a
+    function of the path and never of import order."""
+    assert derive_utility_name("GET", "/agent/{base}") == ("agent", "read")
+    assert derive_utility_name("GET", "/agent/{dir}/{base}") == ("agent", "read.base")
+    assert derive_utility_name("DELETE", "/agent/{dir}/{base}") == ("agent", "delete.base")
+    assert derive_utility_name("GET", "/v0/agent/{a}/{b}/{c}") == ("agent", "read.b.c")
+    # A parameter that opens the path is unanchored too: /{id}/foo vs /foo.
+    assert derive_utility_name("GET", "/foo") == ("foo", "list")
+    assert derive_utility_name("GET", "/{id}/foo") == ("foo", "list.id")
+
+
+def test_anchored_parameters_do_not_change_existing_identities():
+    """Every parameter in these paths follows a literal segment, so the rule
+    above must leave them exactly as they were."""
+    assert derive_utility_name("GET", "/services") == ("services", "list")
+    assert derive_utility_name("GET", "/v0/city/{c}/sessions") == ("city.sessions", "list")
+    assert derive_utility_name("GET", "/v0/city/{c}/session/{id}") == ("city.session", "read")
+    assert derive_utility_name("POST", "/v0/city/{c}/session/{id}/kill") == ("city.session", "kill")
+
+
+def test_gas_city_shaped_collision_now_imports():
+    spec = _spec(
+        "  /agent/{base}: {get: {responses: {'200': {description: ok}}}}\n"
+        "  /agent/{dir}/{base}: {get: {responses: {'200': {description: ok}}}}\n"
+    )
+    ids = sorted(u.id for u in OpenAPIImporter().import_spec(spec))
+    assert ids == ["NestedAPI.agent.read", "NestedAPI.agent.read.base"]
+
+
+def test_duplicate_identity_still_fails_closed():
+    """The tie-break removes one ambiguity class; it does not replace the
+    fail-closed guarantee. Two operations forced onto one id must still error."""
+    spec = _spec(
+        "  /a: {get: {responses: {'200': {description: ok}}}}\n"
+        "  /b: {get: {x-gluless-name: 'NestedAPI.a.list', responses: {'200': {description: ok}}}}\n"
+    )
+    with pytest.raises(UtilityImportError, match="Duplicate utility id"):
+        OpenAPIImporter().import_spec(spec)

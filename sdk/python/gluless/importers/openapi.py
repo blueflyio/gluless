@@ -90,7 +90,22 @@ def derive_utility_name(
     the importer; it does not influence identity. sibling_methods lists the other
     HTTP methods on the same path: a POST on a path that also serves GET is a
     collection create (`/city/{c}/sessions`), a POST-only path ending in a word
-    after a parameter is an RPC action (`/session/{id}/kill`)."""
+    after a parameter is an RPC action (`/session/{id}/kill`).
+
+    Parameter segments are normally erased, because `/city/{name}` and
+    `/city/{id}` name the same capability. That erasure is ambiguous when two
+    paths differ only in parameter arity -- `/agent/{base}` and
+    `/agent/{dir}/{base}` both reduced to `agent.read`. The tie-break is stated
+    as a property of the path alone, never of import order:
+
+        a parameter segment that is NOT immediately preceded by a literal
+        segment contributes its name to the action
+
+    so `/agent/{dir}/{base}` is `agent.read.base` while `/agent/{base}`,
+    `/city/{n}/session/{id}/kill` and every other path whose parameters each
+    follow a literal are unchanged. Duplicate ids remain a fail-closed import
+    error: this rule removes a known ambiguity class, it does not promise
+    injectivity over every conceivable document."""
     segments = [s for s in path.strip("/").split("/") if s]
     while segments and any(re.match(p, segments[0], re.IGNORECASE) for p in _PREFIX_PATTERNS):
         segments.pop(0)
@@ -104,6 +119,14 @@ def derive_utility_name(
             "path has no literal segments; declare x-gluless-name"
         )
 
+    # Parameter segments not anchored to a preceding literal segment.
+    unanchored = [
+        seg[1:-1]
+        for i, seg in enumerate(segments)
+        if _is_param(seg) and (i == 0 or _is_param(segments[i - 1]))
+    ]
+    suffix = "." + ".".join(unanchored) if unanchored else ""
+
     m = method.upper()
     ends_in_param = _is_param(segments[-1])
     rpc_action = (
@@ -115,17 +138,17 @@ def derive_utility_name(
     )
 
     if rpc_action:
-        return (".".join(words[:-1]), words[-1])
+        return (".".join(words[:-1]), words[-1] + suffix)
     resource = ".".join(words)
     if m == "GET":
-        return (resource, "read" if ends_in_param else "list")
+        return (resource, ("read" if ends_in_param else "list") + suffix)
     if m == "POST":
-        return (resource, "create")
+        return (resource, "create" + suffix)
     if m in ("PUT", "PATCH"):
-        return (resource, "update")
+        return (resource, "update" + suffix)
     if m == "DELETE":
-        return (resource, "delete")
-    return (resource, m.lower())
+        return (resource, "delete" + suffix)
+    return (resource, m.lower() + suffix)
 
 
 def _declared_side_effects(method: str, action: str) -> Tuple[SideEffectType, UtilityType]:
