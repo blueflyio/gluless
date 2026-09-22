@@ -1,5 +1,9 @@
-# Claude Instructions
+# PROJECT PURPOSE
+Reference canonical GitLab source.
 
-See [AGENTS.md](AGENTS.md) for the authoritative repository operating contract. See [llms.txt](llms.txt) for the on-demand index.
+# POINTERS TO ORGANIZATION AUTHORITY
+Engineering Authority: blueflyio/blu/blucity-docs
+Role/Capability: blueflyio/blu/blucity-packs
+Current Work: Gas City / Beads
 
-This file is a Claude Code adapter only. Keep it under 10 lines. Do not paste AGENTS.md, catalogs, or URL dumps here. Auto-loaded instruction files fill the context window on every session and every subagent ([context window](https://code.claude.com/docs/en/context-window)).
+DO NOT ADD LOCAL POLICY HERE THAT OVERRIDES ORGANIZATION POLICY.
