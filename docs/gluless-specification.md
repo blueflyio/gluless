@@ -113,6 +113,18 @@ So `/agent/{dir}/{base}` is `agent.read.base`, while every path whose
 parameters each follow a literal segment is unchanged. `x-gluless-name`
 overrides identity outright.
 
+For a document you do not own (an upstream API), identity is declared in a
+sidecar passed to the importer as `name_overrides`, keyed by
+`"<METHOD> <path>"`. It is applied exactly as `x-gluless-name` would be and is
+recorded in `provenance.identity_source` (`derived` | `x-gluless-name` |
+`override`). The tie-break above is the only rule the importer applies on its
+own; it never invents a further disambiguation.
+
+A Contract's identity for approval, evidence and delegation is its content
+digest: `sha256` over the canonical JSON form (sorted keys, no insignificant
+whitespace) of the IR document (`gluless.ir.digest`). `<id>@<digest>` names
+one exact contract.
+
 ## Non-negotiables (short)
 
 - Limits are deterministic; models do not self-authorize

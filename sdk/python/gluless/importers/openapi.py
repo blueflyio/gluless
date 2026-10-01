@@ -15,6 +15,12 @@ Identity rules (deterministic, collision-free by construction):
 error: Limits target ids, so two operations sharing one id would share one
 authority decision.
 
+Collision policy for documents you do not own (an upstream API such as Gas
+City): the importer never invents a tie-break. Pass `name_overrides`, a sidecar
+mapping "<METHOD> <path>" -> "<Ns>.<resource>.<action>", which is applied
+exactly as if `x-gluless-name` were declared on that operation. The sidecar is
+part of the Utility's provenance (`identity_source = "override"`).
+
 Side effects (declared): GET -> READ, PUT/PATCH -> UPDATE, DELETE -> DELETE,
 POST create -> CREATE, POST RPC action -> UNKNOWN. UNKNOWN is deliberate: an
 action like `kill` must not inherit the authority of `create`.
@@ -191,8 +197,10 @@ def _json_schema(container: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]
 
 
 class OpenAPIImporter:
-    def __init__(self, default_namespace: str = "Default"):
+    def __init__(self, default_namespace: str = "Default", name_overrides: Optional[Dict[str, str]] = None):
         self.default_namespace = default_namespace
+        self.name_overrides = {k.strip().upper().split(" ", 1)[0] + " " + k.strip().split(" ", 1)[1]: v
+                               for k, v in (name_overrides or {}).items()}
         self.diagnostics: List[str] = []
 
     def import_spec(self, spec_content: str, source_uri: Optional[str] = None) -> List[Utility]:
@@ -234,7 +242,11 @@ class OpenAPIImporter:
                 siblings = tuple(k for k in path_item if k.lower() in HTTP_METHODS and k != method)
                 resource, action = derive_utility_name(method, path, op.get("operationId"), siblings)
                 ns = namespace
-                custom_name = op.get("x-gluless-name")
+                custom_name = self.name_overrides.get(f"{method.upper()} {path}") or op.get("x-gluless-name")
+                identity_source = (
+                    "override" if f"{method.upper()} {path}" in self.name_overrides
+                    else "x-gluless-name" if op.get("x-gluless-name") else "derived"
+                )
                 if custom_name:
                     parts = str(custom_name).split(".")
                     if len(parts) >= 3:
@@ -304,6 +316,7 @@ class OpenAPIImporter:
                             "source_digest": doc_digest,
                             "operation_id": op.get("operationId") or "",
                             "location": location,
+                            "identity_source": identity_source,
                         },
                     )
                 )
