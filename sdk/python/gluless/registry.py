@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
-from gluless.models import SideEffectType, Utility, UtilityTransport, UtilityType
+from gluless.models import SideEffectType, Utility
 
 
 class UtilityRegistry:
@@ -76,20 +76,13 @@ class UtilityRegistry:
             "samples": 0
         }
 
-        # Handle transport serialization
-        transport_data = {
-            "type": utility.transport.type,
-            "method": utility.transport.method,
-            "path": utility.transport.path,
-            "parameters": utility.transport.parameters,
-            "request_body": utility.transport.request_body,
-            "responses": utility.transport.responses,
-            "servers": utility.transport.servers,
-            "deprecated": utility.transport.deprecated,
-        }
+        # The canonical IR, serialized by the schema that defines it. Every other
+        # key below is a derived search index over this record; `utility` is the
+        # only field `resolve()` reads back, so the round-trip cannot drift.
+        canonical = utility.model_dump(mode="json")
 
-        # Aggregate capability schemas
         self.utilities[registry_id] = {
+            "utility": canonical,
             "utility_id": registry_id,
             "source_type": utility.transport.type,
             "source_uri": source_uri,
@@ -108,7 +101,7 @@ class UtilityRegistry:
             },
             "provenance": dict(utility.provenance, source_uri=source_uri),
             "version": utility.version,
-            "transport": transport_data,
+            "transport": canonical["transport"],
             "type": utility.type.value
         }
         self.save()
@@ -160,34 +153,14 @@ class UtilityRegistry:
         return results
 
     def resolve(self, utility_id: str) -> Optional[Utility]:
-        """
-        Converts registered JSON model back into an executable Utility IR model.
+        """Deserialize a registered record back into the Utility IR.
+
+        Reads only the canonical `utility` payload written by `register()`, so
+        this is the exact inverse of serialization. A record written before the
+        canonical IR existed is treated as an unresolvable stale cache entry —
+        the registry is a regenerable index, not an authority.
         """
         ut = self.utilities.get(utility_id)
-        if not ut:
+        if not ut or not isinstance(ut.get("utility"), dict):
             return None
-
-        t = ut["transport"]
-        transport = UtilityTransport(
-            type=t["type"],
-            method=t["method"],
-            path=t["path"],
-            parameters=t["parameters"],
-            request_body=t["request_body"],
-            responses=t["responses"],
-            servers=t.get("servers", []),
-            deprecated=t.get("deprecated", False),
-        )
-
-        return Utility(
-            id=ut["operation_id"],
-            name=utility_id.split("/")[-1],
-            namespace=ut["semantic_capabilities"]["domain"],
-            description=f"Persistent utility resolved from {utility_id}",
-            type=UtilityType(ut["type"]),
-            side_effects=SideEffectType(ut["side_effect"]["declared"]),
-            transport=transport,
-            auth=ut["auth_requirements"],
-            version=ut.get("version", "0.0.0"),
-            provenance=ut.get("provenance") if isinstance(ut.get("provenance"), dict) else {},
-        )
+        return Utility.model_validate(ut["utility"])

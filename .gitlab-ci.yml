@@ -1,19 +1,15 @@
-# GluLess CI
+# GluLess CI (TRANSITIONAL)
 #
-# Composes shared blueflyio/gitlab_components:
-#   minimal-ci  stages, base runner, custom-ci governance detector
-#   pages       publishes demo/ (static files) to GitLab Pages from main
-# The only repo-local job is the Python test job; no python component exists
-# in the shared catalog yet. If one is added, replace test:python with it.
+# GitLab is being exited (bc-escm, cutover bc-m0j6). This file exists only so
+# any remaining GitLab mirror of this repository verifies until the exit; the
+# canonical verification workflow is .forgejo/workflows/verify.yml and the two
+# must stay behaviourally identical. Do not add jobs here.
+#
+# The former `pages` include was removed: demo/ no longer exists in this
+# repository and the component would fail on every pipeline.
 
 include:
   - component: $CI_SERVER_FQDN/blueflyio/gitlab_components/minimal-ci@release/v0.1.x
-  - component: $CI_SERVER_FQDN/blueflyio/gitlab_components/pages@release/v0.1.x
-    inputs:
-      output_dir: demo
-      deploy_branch: main
-      auto_deploy: "true"
-      artifact_expiry: "4 weeks"
 
 test:python:
   stage: test
@@ -28,6 +24,7 @@ test:python:
     - pip install -q -e ".[dev]"
   script:
     - ruff check .
+    - python -m gluless.schema --check
     - pytest -q --junitxml=junit.xml
   artifacts:
     when: always

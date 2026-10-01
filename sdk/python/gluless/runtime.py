@@ -26,6 +26,7 @@ from ag_ui.core import (
     ToolCallResultEvent,
     ToolCallStartEvent,
 )
+from pydantic import BaseModel
 
 from gluless.bindings import UtilityResolver
 from gluless.evidence import Evidence, EvidenceBuilder
@@ -44,6 +45,8 @@ class GoalUnsatisfiableError(Exception):
 
 
 def _jsonable(obj: Any) -> Any:
+    if isinstance(obj, BaseModel):  # IR nodes (gluless.models) are Pydantic v2
+        return obj.model_dump(mode="json")
     if dataclasses.is_dataclass(obj):
         return dataclasses.asdict(obj)
     if isinstance(obj, dict):

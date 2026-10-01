@@ -1,0 +1,336 @@
+{
+  "$defs": {
+    "EvidenceRequirement": {
+      "additionalProperties": false,
+      "description": "An assertion that must hold over observed state for a run to be provable.",
+      "properties": {
+        "assertion": {
+          "title": "Assertion",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "default": "1.0.0",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "assertion"
+      ],
+      "title": "EvidenceRequirement",
+      "type": "object"
+    },
+    "Goal": {
+      "additionalProperties": false,
+      "description": "An outcome that must become true for a run to be satisfied.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "expression": {
+          "description": "Goal expression. The runtime currently evaluates '<dotted.path> == <value>' and '!='.",
+          "title": "Expression",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "default": "1.0.0",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "expression"
+      ],
+      "title": "Goal",
+      "type": "object"
+    },
+    "Limit": {
+      "additionalProperties": false,
+      "description": "An authority rule. Evaluated in declaration order; the last match wins.",
+      "properties": {
+        "action_pattern": {
+          "description": "'allow <selector>' | 'deny <selector>' | 'require approval for <selector>'.",
+          "title": "Action Pattern",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "default": "1.0.0",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "action_pattern"
+      ],
+      "title": "Limit",
+      "type": "object"
+    },
+    "SideEffectType": {
+      "description": "Declared side-effect class of a Utility. Never inferred from behaviour.",
+      "enum": [
+        "none",
+        "read",
+        "create",
+        "update",
+        "delete",
+        "external_message",
+        "financial",
+        "privilege_change",
+        "infrastructure",
+        "unknown"
+      ],
+      "title": "SideEffectType",
+      "type": "string"
+    },
+    "Utility": {
+      "additionalProperties": false,
+      "description": "A named, authority-bearing capability. `id` is what a Limit selector targets,\nso it must be unique within a contract; importers fail closed on duplicates.",
+      "properties": {
+        "auth": {
+          "description": "OpenAPI Security Requirement Objects. An empty list means 'explicitly none'.",
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Auth",
+          "type": "array"
+        },
+        "description": {
+          "description": "Human-readable summary. Never used for authority.",
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "description": "Fully qualified identity: '<namespace>.<resource>.<action>'.",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "description": "Identity without the namespace: '<resource>.<action>'.",
+          "title": "Name",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Provider namespace, e.g. 'GasCity'.",
+          "title": "Namespace",
+          "type": "string"
+        },
+        "provenance": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Where this Utility came from: source_type, source_uri, source_version, source_digest, operation_id, location. Never used for authority.",
+          "title": "Provenance",
+          "type": "object"
+        },
+        "side_effects": {
+          "$ref": "#/$defs/SideEffectType"
+        },
+        "transport": {
+          "$ref": "#/$defs/UtilityTransport"
+        },
+        "type": {
+          "$ref": "#/$defs/UtilityType"
+        },
+        "version": {
+          "default": "0.0.0",
+          "description": "Version of the source document this was imported from.",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "namespace",
+        "description",
+        "type",
+        "side_effects",
+        "transport"
+      ],
+      "title": "Utility",
+      "type": "object"
+    },
+    "UtilityTransport": {
+      "additionalProperties": false,
+      "description": "How a Utility is actually invoked. Populated by an importer, consumed by\n`gluless.bindings.UtilityResolver`.",
+      "properties": {
+        "deprecated": {
+          "default": false,
+          "description": "Mirrors the source document's `deprecated` flag.",
+          "title": "Deprecated",
+          "type": "boolean"
+        },
+        "method": {
+          "description": "HTTP method, upper-case. Empty for an unresolved stub.",
+          "title": "Method",
+          "type": "string"
+        },
+        "parameters": {
+          "description": "OpenAPI Parameter Objects, $ref-resolved. Operation-level entries override path-level ones.",
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Parameters",
+          "type": "array"
+        },
+        "path": {
+          "description": "Templated request path, e.g. '/city/{name}/sessions'.",
+          "title": "Path",
+          "type": "string"
+        },
+        "request_body": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "JSON Schema of the request body, or null when the operation declares none.",
+          "title": "Request Body"
+        },
+        "responses": {
+          "additionalProperties": true,
+          "description": "Status code (as a string) -> response JSON Schema, or null when none is declared.",
+          "title": "Responses",
+          "type": "object"
+        },
+        "servers": {
+          "description": "Base URLs from the source document, most specific level first (operation, path, document).",
+          "items": {
+            "type": "string"
+          },
+          "title": "Servers",
+          "type": "array"
+        },
+        "type": {
+          "description": "Transport family, e.g. 'openapi', or 'unresolved' for a parser stub.",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "method",
+        "path"
+      ],
+      "title": "UtilityTransport",
+      "type": "object"
+    },
+    "UtilityType": {
+      "description": "Execution class of a Utility: how the runtime may use it.",
+      "enum": [
+        "read",
+        "mutation",
+        "stream"
+      ],
+      "title": "UtilityType",
+      "type": "string"
+    }
+  },
+  "$id": "https://gluless.dev/schema/contract-0.1.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The root IR document. Produced by the `.glu` parser, the YAML compiler, or\nassembled from imported Utilities; consumed by the runtime and the resolver.",
+  "properties": {
+    "evidence_requirements": {
+      "items": {
+        "$ref": "#/$defs/EvidenceRequirement"
+      },
+      "title": "Evidence Requirements",
+      "type": "array"
+    },
+    "goals": {
+      "items": {
+        "$ref": "#/$defs/Goal"
+      },
+      "title": "Goals",
+      "type": "array"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "ir_version": {
+      "default": "0.1.0",
+      "description": "Version of the IR schema this document conforms to.",
+      "title": "Ir Version",
+      "type": "string"
+    },
+    "limits": {
+      "items": {
+        "$ref": "#/$defs/Limit"
+      },
+      "title": "Limits",
+      "type": "array"
+    },
+    "utilities": {
+      "items": {
+        "$ref": "#/$defs/Utility"
+      },
+      "title": "Utilities",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "goals",
+    "limits",
+    "utilities"
+  ],
+  "title": "Contract",
+  "type": "object"
+}

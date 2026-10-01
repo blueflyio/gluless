@@ -14,6 +14,7 @@ Proven Done = `gluless prove` / pack check reaches `PROVEN=YES` with evidence. C
 sdk/python/gluless/   Runtime + parser + OpenAPI importer
 sdk/python/tests/     pytest
 api/openapi.yaml      Example OpenAPI (x-gluless-* annotations)
+api/contract.schema.json  Canonical IR JSON Schema (GENERATED from models.py)
 pack/                 Gas City pack + Formula gluless-prove
 docs/PLAN.md          Phased status (only plan doc)
 docs/gluless-specification.md   Language / IR reference

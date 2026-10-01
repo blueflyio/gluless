@@ -26,7 +26,6 @@ from gluless.models import Contract, Goal, Utility, UtilityType
 from gluless.parser import parse_file
 from gluless.runtime import GluLessRuntime
 
-
 ENV_CONTRACT = "GLULESS_CONTRACT"
 ENV_OPENAPI = "GLULESS_OPENAPI"
 ENV_BASE_URL = "GLULESS_BASE_URL"

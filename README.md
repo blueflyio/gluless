@@ -101,6 +101,7 @@ Result statuses: `satisfied | blocked | waiting_for_approval | failed`.
 | Capability | State |
 |------------|--------|
 | `.glu` parser → `models.py` IR | **Done** (syntax only; no semantic validator) |
+| Canonical IR schema (`api/contract.schema.json`, generated from `models.py`) | **Done** |
 | OpenAPI Utility importer | **Done** |
 | Limits evaluator (last match wins) | **Done** |
 | HTTP executor + SHA-256 evidence digests | **Done** |
@@ -109,7 +110,7 @@ Result statuses: `satisfied | blocked | waiting_for_approval | failed`.
 | Vertical: `ServicesHealthy` (mock + pytest) | **Done** (Phase 2) |
 | GitLab Goal / OpenAPI utility projection | **Blocked** (Phase 3) |
 
-Honest gaps: MCP/A2A adapters, approval resume, real JSON Schema validation for `response.schema valid`, published IR schema beyond Python dataclasses, planner beyond first READ/MUTATION.
+Honest gaps: MCP/A2A adapters, approval resume, real JSON Schema validation for `response.schema valid`, planner beyond first READ/MUTATION.
 
 ---
 
